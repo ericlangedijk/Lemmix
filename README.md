@@ -157,7 +157,7 @@ allows you to enter sectionname + levelnumber inside the levecode screen
 - `Misc.UseCheatKeyToSolveLevel=1`  
 allows to cheat the level inside the game screen bij pressing "`5`"  
 - `Misc.UseCheatScrollingInPreviewScreen=1`  
-allows to scroll through al levels in the preview screen using the `← →` arrow  keys.  
+allows to scroll through al levels in the preview screen using the `↑ ↓` arrow  keys.  
 
 ## Code changes
 
