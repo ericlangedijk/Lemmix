@@ -4,6 +4,12 @@
 # Lemmix 2.0 Beta
 ###### March 2020
 
+# FAQ
+### What are the keyboard shortcuts?
+They are described [here](#keyboard-in-game)
+### What if I can't finish a level? Can I continue?
+See the Cheating section, [here](#cheating)
+
 ## Intro
 
 After 15 years LemmixPlayer is changed. Enhanced and modernized. In short:
