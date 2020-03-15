@@ -1,7 +1,7 @@
 
-# Last release (2.0 Beta) [here](https://github.com/ericlangedijk/Lemmix/releases/tag/2.0)
+# Last release (2.0.1 Beta) [here](https://github.com/ericlangedijk/Lemmix/releases)
 
-# Lemmix 2.0 Beta
+# Lemmix 2.0.1 Beta
 ###### March 2020
 
 # FAQ
