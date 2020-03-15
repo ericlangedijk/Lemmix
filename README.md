@@ -9,6 +9,8 @@
 They are described [here](#keyboard-in-game)
 ### What if I can't finish a level? Can I continue?
 See the Cheating section, [here](#cheating)
+### Can I toggle sound effects off and still have music on?
+Yes, use `s` to toggle sound effects and `m` to toggle music
 
 ## Intro
 
