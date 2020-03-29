@@ -1,2 +1,2 @@
 
-# Last release [here](https://github.com/ericlangedijk/Lemmix/releases)
+# Latest release [here](https://github.com/ericlangedijk/Lemmix/releases)
