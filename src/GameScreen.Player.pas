@@ -721,6 +721,7 @@ begin
   GameInfo.Style                        := App.Style;
   GameInfo.Renderer                     := App.Renderer;
   GameInfo.TargetBitmap                 := App.TargetBitmap;
+  GameInfo.SoundMgr                     := App.SoundMgr;
   GameInfo.Level                        := App.Level;
   GameInfo.LevelLoadingInfo             := App.CurrentLevelInfo;
   GameInfo.GraphicSet                   := App.GraphicSet;
@@ -948,7 +949,10 @@ begin
           Self.PaintTo(bmp.Canvas, 0, 0);
           var png: TPngImage := bmp.ToPng;
           try
-            png.SaveToFile(Consts.PathToScreenShots + StripInvalidFileChars(fGame.Level.Info.Title) + '.png');
+            var t: string := StripInvalidFileChars(fGame.Level.Info.Title);
+            if t.IsEmpty then
+              t := 'screenshot';
+            png.SaveToFile(Consts.PathToScreenShots + t + '.png');
             Clipboard.Assign(png);
           finally
             Png.Free;

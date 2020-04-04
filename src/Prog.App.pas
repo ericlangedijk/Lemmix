@@ -17,7 +17,7 @@ uses
   Styles.Base,
   Level.Base,
   Prog.Types, Prog.Base, Prog.Config, Prog.Cache,
-  Game, Game.Rendering;
+  Game, Game.Sound, Game.Rendering;
 
 type
   TApp = class sealed
@@ -26,6 +26,7 @@ type
     ReplayFileName         : string;                      // determined by mainform
     Style                  : TStyle;                      // constructed and initialized by mainform
     StyleCache             : TStyleCache;                 // constructed and initialized by mainform
+    SoundMgr               : TSoundMgr;                   // constructor here
     GlobalGame             : TLemmingGame;                // constructed and initialized by mainform, prepared in preview screen
     CurrentLevelInfo       : TLevelLoadingInformation;    // ref only, initizialized by mainform, changed all over the place
     ReplayCurrent          : Boolean;
@@ -52,7 +53,7 @@ constructor TApp.Create;
 begin
   inherited Create;
   Config.Load;
-  Consts.Init(Config.PathToStyles, Config.PathToMusic);
+  Consts.Init(Config.PathToStyles, Config.PathToMusic, Config.PathToSounds);
   Consts.SetStyleName(Config.StyleName);
   NewStyleName := Consts.StyleName; // prevent change
   CurrentDisplay.MonitorIndex := Config.Monitor;
@@ -62,6 +63,10 @@ begin
 
   Level := Tlevel.Create;
   Renderer := TRenderer.Create;
+
+  SoundMgr := TSoundMgr.Create;
+  SoundData.Init(SoundMgr, Consts.PathToSounds);
+
   GlobalGame := TLemmingGame.Create;
 
 end;
@@ -75,6 +80,7 @@ begin
   FreeAndNil(GlobalGame);
   FreeAndNil(Renderer);
   FreeAndNil(Level);
+  FreeAndNil(SoundMgr);
 
   // we do not free the style, because it is pooled
 

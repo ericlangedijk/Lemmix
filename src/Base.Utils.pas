@@ -187,8 +187,8 @@ type
   TStringArray = TArray<string>;
   TStringArrayHelper = record helper for TStringArray
   public
-    function IndexOf(const s: string): Integer;
-    function Contains(const s: string): Boolean; inline;
+    function IndexOf(const s: string; caseSensitive: Boolean = True): Integer;
+    function Contains(const s: string; caseSensitive: Boolean = True): Boolean; inline;
     function Length: Integer; inline;
     procedure Sort;
   end;
@@ -607,20 +607,29 @@ end;
 
 { TStringArrayHelper }
 
-function TStringArrayHelper.IndexOf(const s: string): Integer;
+function TStringArrayHelper.IndexOf(const s: string; caseSensitive: Boolean = True): Integer;
 begin
   var ix: Integer := 0;
-  for var tmp: string in Self do begin
-    if s = tmp then
-      Exit(ix);
-    Inc(ix);
+  if caseSensitive then begin
+    for var tmp: string in Self do begin
+      if s = tmp then
+        Exit(ix);
+      Inc(ix);
+    end;
+  end
+  else begin
+    for var tmp: string in Self do begin
+      if SameText(s, tmp) then
+        Exit(ix);
+      Inc(ix);
+    end;
   end;
   Result := -1;
 end;
 
-function TStringArrayHelper.Contains(const s: string): Boolean;
+function TStringArrayHelper.Contains(const s: string; caseSensitive: Boolean = True): Boolean;
 begin
-  Result := IndexOf(s) >= 0;
+  Result := IndexOf(s, caseSensitive) >= 0;
 end;
 
 function TStringArrayHelper.Length: Integer;

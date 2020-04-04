@@ -7,8 +7,9 @@ interface
 uses
 vcl.dialogs,
   Winapi.Windows, Winapi.MMSystem,
-  System.Classes, System.Contnrs, System.SysUtils, System.Math,
+  System.Classes, System.Contnrs, System.SysUtils, System.Math, System.IOUtils,
   Base.Utils,
+  Dos.Consts,
   Prog.Types, Prog.Base, Prog.Data,
   BASS;
 
@@ -32,6 +33,7 @@ type
     class procedure PlayMusic(aMusic: TMusic); static;
     class procedure StopMusic(aMusic: TMusic); static;
     class procedure SetMusicVolume(aMusic: TMusic; aVolume: Single); static;
+    class procedure SetSoundVolume(aSound: TSound; aVolume: Single); static;
   public
     class procedure Init; static; // must be called at startup
     class procedure Done; static;
@@ -47,16 +49,20 @@ type
   end;
 
   TSound = class sealed(TAbstractSound)
+  private
+    fVolume: Single;
+    procedure SetVolume(aValue: Single);
   public
-    constructor Create(const aFileName: string);
+    constructor Create(const aFileName: string; const aVolume: Single = 1.0; disk: Boolean = False);
     destructor Destroy; override;
     procedure Play; inline;
+    property Volume: Single read fVolume write SetVolume;
     property DataPtr: Pointer read fDataPtr;
     property DataSize: Integer read fDataSize;
     property Handle: DWORD read fHandle;
   end;
 
-  TMusic = class(TAbstractSound)
+  TMusic = class sealed(TAbstractSound)
   private
     fVolume: Single;
     fStreamType: TMusicStreamType;
@@ -78,7 +84,7 @@ type
   TMusicList = class(TFastObjectList<TMusic>);
 
   // we create, manage and play sounds from here (by index)
-  TSoundMgr = class
+  TSoundMgr = class sealed
   private
     fSounds  : TSoundList;
     fMusics  : TMusicList;
@@ -88,7 +94,7 @@ type
     constructor Create;
     destructor Destroy; override;
   // sounds
-    function AddSoundFromFileName(const aFileName: string): Integer;
+    function AddSoundFromFileName(const aFileName: string; const aVolume: Single = 1.0; disk: Boolean = False): Integer;
     procedure ClearSounds;
     procedure PlaySound(index: Integer);
     procedure StopSound(index: Integer);
@@ -102,6 +108,38 @@ type
     property MusicIsPlaying[index: Integer]: Boolean read GetMusicIsPlaying;
   end;
 
+  SoundData = class sealed
+  public
+  class var
+    SFX_BUILDER_WARNING  : Integer;
+    SFX_ASSIGN_SKILL     : Integer;
+    SFX_YIPPEE           : Integer;
+    SFX_SPLAT            : Integer;
+    SFX_LETSGO           : Integer;
+    SFX_ENTRANCE         : Integer;
+    SFX_VAPORIZING       : Integer;
+    SFX_DROWNING         : Integer;
+    SFX_EXPLOSION        : Integer;
+    SFX_HITS_STEEL       : Integer;
+    SFX_OHNO             : Integer;
+    SFX_SKILLBUTTON      : Integer;
+    SFX_ROPETRAP         : Integer;
+    SFX_TENTON           : Integer;
+    SFX_BEARTRAP         : Integer;
+    SFX_ELECTROTRAP      : Integer;
+    SFX_SPINNINGTRAP     : Integer;
+    SFX_SQUISHINGTRAP    : Integer;
+    SFX_MINER            : Integer;
+    SFX_DIGGER           : Integer;
+    SFX_BASHER           : Integer;
+    SFX_FlOATER          : Integer;
+    SFX_OPENUMBRELLA     : Integer;
+    SFX_SILENTDEATH      : Integer;
+    SFX_NUKE             : Integer;
+  public
+    class constructor Create;
+    class procedure Init(aSoundMgr: TSoundMgr; const aPathToCustomSounds: string); static;
+  end;
 
 implementation
 
@@ -168,6 +206,7 @@ begin
     if (BASS_ChannelIsActive(aSound.Handle) = BASS_ACTIVE_PLAYING)
     and (BASS_ChannelGetPosition(aSound.Handle, BASS_POS_BYTE) >= BASS_ChannelSeconds2Bytes(aSound.Handle, 0.1)) then begin
       var tmpHandle: DWORD := BASS_StreamCreateFile(True, aSound.DataPtr, 0, aSound.DataSize, BASS_UNICODE or BASS_STREAM_AUTOFREE);
+      BASS_ChannelSetAttribute(tmpHandle, BASS_ATTRIB_VOL,aSound.Volume);
     	BASS_ChannelPlay(tmpHandle, True);
       Exit;
     end;
@@ -209,13 +248,21 @@ begin
   BASS_ChannelSetAttribute(aMusic.Handle, BASS_ATTRIB_VOL, aVolume);
 end;
 
+class procedure SoundLibrary.SetSoundVolume(aSound: TSound; aVolume: Single);
+begin
+  EnsureRange(aVolume, 0.0, 1.0);
+  BASS_ChannelSetAttribute(aSound.Handle, BASS_ATTRIB_VOL, aVolume);
+end;
+
 { TSound }
 
-constructor TSound.Create(const aFileName: string);
+constructor TSound.Create(const aFileName: string; const aVolume: Single = 1.0; disk: Boolean = False);
 begin
   inherited Create;
-  fDataPtr := TData.CreatePointer(Consts.StyleName, aFileName, TDataType.Sound, {out}fDataSize);
+  fDataPtr := TData.CreatePointer(Consts.StyleName, aFileName, TDataType.Sound, {out}fDataSize, False, disk);
   fHandle := SoundLibrary.CreateSoundHandle(Self);
+  fVolume := aVolume;
+  SoundLibrary.SetSoundVolume(Self, fVolume);
 end;
 
 destructor TSound.Destroy;
@@ -229,6 +276,15 @@ end;
 procedure TSound.Play;
 begin
   SoundLibrary.PlaySound(Self);
+end;
+
+procedure TSound.SetVolume(aValue: Single);
+begin
+  Restrict(aValue, 0.0, 1.0);
+  if fVolume = aValue then
+    Exit;
+  fVolume := aValue;
+  SoundLibrary.SetSoundVolume(Self, fVolume);
 end;
 
 { TMusic }
@@ -287,9 +343,9 @@ begin
   inherited Destroy;
 end;
 
-function TSoundMgr.AddSoundFromFileName(const aFileName: string): Integer;
+function TSoundMgr.AddSoundFromFileName(const aFileName: string; const aVolume: Single = 1.0; disk: Boolean = False): Integer;
 begin
-  var snd := TSound.Create(aFileName);
+  var snd := TSound.Create(aFileName, aVolume, disk);
   Result := fSounds.Add(snd);
 end;
 
@@ -353,6 +409,138 @@ end;
 procedure TSoundMgr.ClearSounds;
 begin
   fSounds.Clear;
+end;
+
+{ TSoundData }
+
+class constructor SoundData.Create;
+begin
+  SFX_BUILDER_WARNING  := -1;
+  SFX_ASSIGN_SKILL     := -1;
+  SFX_YIPPEE           := -1;
+  SFX_SPLAT            := -1;
+  SFX_LETSGO           := -1;
+  SFX_ENTRANCE         := -1;
+  SFX_VAPORIZING       := -1;
+  SFX_DROWNING         := -1;
+  SFX_EXPLOSION        := -1;
+  SFX_HITS_STEEL       := -1;
+  SFX_OHNO             := -1;
+  SFX_SKILLBUTTON      := -1;
+  SFX_ROPETRAP         := -1;
+  SFX_TENTON           := -1;
+  SFX_BEARTRAP         := -1;
+  SFX_ELECTROTRAP      := -1;
+  SFX_SPINNINGTRAP     := -1;
+  SFX_SQUISHINGTRAP    := -1;
+  SFX_MINER            := -1;
+  SFX_DIGGER           := -1;
+  SFX_BASHER           := -1;
+  SFX_OPENUMBRELLA     := -1;
+  SFX_SILENTDEATH      := -1;
+end;
+
+class procedure SoundData.Init(aSoundMgr: TSoundMgr; const aPathToCustomSounds: string);
+
+var
+  useCustom: Boolean;
+  defaultNames: TStringList;
+  customFileNames: TStringList;
+
+    function Add(effect: TSoundEffect; const aVolume: Single = 1.0): Integer;
+    const
+      defaultExt = '.wav';
+    var
+      defaultfilename: string;
+    begin
+      Result := -1;
+      defaultfilename := effect.AsFileName(defaultExt);
+      // default resource sounds only
+      if not useCustom then begin
+        if not effect.IsCustom then
+          Result := aSoundMgr.AddSoundFromFileName(defaultfilename, aVolume);
+      end
+      // check overwritten or custom or default
+      else begin
+        var mp3: string := ReplaceFileExt(defaultFilename, '.mp3');
+        // check mp3
+        if customFileNames.IndexOf(mp3) >= 0 then begin
+          Result := aSoundMgr.AddSoundFromFileName(aPathToCustomSounds + mp3, aVolume, True);
+        end
+        // check wav
+        else if customFileNames.IndexOf(defaultfilename) >= 0 then begin
+          Result := aSoundMgr.AddSoundFromFileName(aPathToCustomSounds + defaultFilename, aVolume, True);
+        end
+        // else default
+        else begin
+          if not effect.IsCustom then
+            Result := aSoundMgr.AddSoundFromFileName(defaultfilename, aVolume);
+        end;
+      end;
+    end;
+
+
+const
+  ext = '.wav';
+begin
+  useCustom := not aPathToCustomSounds.IsEmpty and TDirectory.Exists(aPathToCustomSounds);
+  defaultNames := TStringList.Create;
+  customFileNames := TStringList.Create;
+  try
+
+    for var snd: TSoundEffect := Succ(Low(TSoundEffect)) to High(TSoundEffect) do
+      defaultNames.Add(snd.AsFileName('').ToUpper);
+    defaultNames.Sort;
+    defaultNames.CaseSensitive := False;
+
+    if useCustom then begin
+      var files: TArray<string> := nil;
+      var filter: TDirectory.TFilterPredicate :=
+        function (const Path: string; const SearchRec: TSearchRec): Boolean
+        begin
+          var ext: string := ExtractFileExt(SearchRec.Name).ToUpper;
+          var name: string := ReplaceFileExt(ExtractFileName(SearchRec.Name), '').ToUpper;
+          Result := (SearchRec.Size < 256 * 1024) and ((ext = '.WAV') or (ext = '.MP3')) and (defaultNames.IndexOf(name) >= 0);
+        end;
+      files := TDirectory.GetFiles(aPathToCustomSounds, '*.*', filter);
+      for var s: string in files do
+        customFileNames.Add(ExtractFileName(s));
+      customFileNames.Sort;
+      customFileNames.CaseSensitive := False;
+    end;
+
+    // initialize sounds
+    SFX_BUILDER_WARNING := Add(TSoundEffect.BuilderWarning);
+    SFX_ASSIGN_SKILL    := Add(TSoundEffect.AssignSkill);
+    SFX_YIPPEE          := Add(TSoundEffect.Yippee);
+    SFX_SPLAT           := Add(TSoundEffect.Splat);
+    SFX_LETSGO          := Add(TSoundEffect.LetsGo);
+    SFX_ENTRANCE        := Add(TSoundEffect.EntranceOpening);
+    SFX_VAPORIZING      := Add(TSoundEffect.Vaporizing);
+    SFX_DROWNING        := Add(TSoundEffect.Drowning);
+    SFX_EXPLOSION       := Add(TSoundEffect.Explosion);
+    SFX_HITS_STEEL      := Add(TSoundEffect.HitsSteel);
+    SFX_OHNO            := Add(TSoundEffect.Ohno);
+    SFX_SKILLBUTTON     := Add(TSoundEffect.SkillButtonSelect);
+    SFX_ROPETRAP        := Add(TSoundEffect.RopeTrap);
+    SFX_TENTON          := Add(TSoundEffect.TenTonTrap);
+    SFX_BEARTRAP        := Add(TSoundEffect.BearTrap);
+    SFX_ELECTROTRAP     := Add(TSoundEffect.ElectroTrap);
+    SFX_SPINNINGTRAP    := Add(TSoundEffect.SpinningTrap);
+    SFX_SQUISHINGTRAP   := Add(TSoundEffect.SquishingTrap);
+
+    // custom
+    SFX_MINER           := Add(TSoundEffect.Miner, 0.2);
+    SFX_DIGGER          := Add(TSoundEffect.Digger, 0.2);
+    SFX_BASHER          := Add(TSoundEffect.Basher, 0.2);
+    SFX_OPENUMBRELLA    := Add(TSoundEffect.OpenUmbrella, 0.2);
+    SFX_SILENTDEATH     := Add(TSoundEffect.SilentDeath, 0.2);
+    SFX_NUKE            := Add(TSoundEffect.Nuke);
+  finally
+    defaultNames.Free;
+    customFileNames.Free;
+  end;
+
 end;
 
 end.

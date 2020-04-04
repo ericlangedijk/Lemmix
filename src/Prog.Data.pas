@@ -37,8 +37,8 @@ type
     class procedure Init; static; // must be called at startup
     class procedure Done; static;
 
-    class function CreateDataStream(const aStyleName, aFileName: string; aType: TDataType; preventCaching: Boolean = False): TBytesStream; static;
-    class function CreatePointer(const aStyleName, aFileName: string; aType: TDataType; out aSize: Integer; preventCaching: Boolean = False): Pointer; static;
+    class function CreateDataStream(const aStyleName, aFileName: string; aType: TDataType; preventCaching: Boolean = False; disk: Boolean = False): TBytesStream; static;
+    class function CreatePointer(const aStyleName, aFileName: string; aType: TDataType; out aSize: Integer; preventCaching: Boolean = False; disk: Boolean = False): Pointer; static;
     class function CreateCursorBitmap(const aStyleName, aFileName: string; preventCaching: Boolean = False): TBitmap; static;
 
   end;
@@ -61,7 +61,7 @@ begin
   //MessageBox(0, PChar(s), 'requests/cachehits', 0);
 end;
 
-class function TData.CreateDataStream(const aStyleName, aFileName: string; aType: TDataType; preventCaching: Boolean = False): TBytesStream;
+class function TData.CreateDataStream(const aStyleName, aFileName: string; aType: TDataType; preventCaching: Boolean = False; disk: Boolean = False): TBytesStream;
 {-------------------------------------------------------------------------------
   Dependent on the datatype, we load a bytesstream.
 -------------------------------------------------------------------------------}
@@ -131,7 +131,8 @@ begin
   mapping := False;
 
   var forceReadFromDisk: Boolean :=
-    ((Consts.StyleDef = TStyleDef.User) and (aType in [TDataType.LemmingData, TDataType.LevelGraphics, TDataType.LevelSpecialGraphics, TDataType.Level, TDataType.Music]));
+    disk
+    or ((Consts.StyleDef = TStyleDef.User) and (aType in [TDataType.LemmingData, TDataType.LevelGraphics, TDataType.LevelSpecialGraphics, TDataType.Level, TDataType.Music]));
 
   var info: Consts.TStyleInformation := Consts.FindStyleInfo(aStyleName);
 
@@ -224,7 +225,7 @@ begin
     Result.Position := 0;
 end;
 
-class function TData.CreatePointer(const aStyleName, aFileName: string; aType: TDataType; out aSize: Integer; preventCaching: Boolean = False): Pointer;
+class function TData.CreatePointer(const aStyleName, aFileName: string; aType: TDataType; out aSize: Integer; preventCaching: Boolean = False; disk: Boolean = False): Pointer;
 // used for sounds
 var
   stream: TBytesStream;
@@ -233,7 +234,7 @@ begin
   Result := nil;
   stream := nil;
   try
-    stream := CreateDataStream(aStyleName, aFileName, aType, preventCaching);
+    stream := CreateDataStream(aStyleName, aFileName, aType, preventCaching, disk);
     if stream.Size = 0 then
       Exit;
     GetMem(Result, stream.Size);

@@ -594,9 +594,6 @@ begin
 
         // exact
         //fExactCache.Add(TExactEntry.Create(key, info.SectionIndex, info.LevelIndex), info);
-
-//        if not Assigned(FindExactLevel(key, info.SectionIndex, info.LevelIndex)) then
-//          dlg('kut');
       end;
 
     end;

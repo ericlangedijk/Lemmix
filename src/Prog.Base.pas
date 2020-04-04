@@ -101,6 +101,7 @@ type
     class var fCachedAppPath           : string;
     class var fPathToStyles            : string;
     class var fPathToMusic             : string;
+    class var fPathToSounds            : string;
     class var fInitialized             : Boolean;
     class var fDefined                 : Boolean;
   // current style
@@ -120,7 +121,6 @@ type
     class function GetPathToData: string; static; inline;
     class function GetPathToLogos: string; static; inline;
     class function GetPathToParticles: string; static; inline;
-    class function GetPathToSounds: string; static; inline;
     class function GetPathToStyles: string; static; inline;
     class function GetPathToStyle(const aStylename: string): string; static; inline;
     class function GetPathToScreenShots: string; static; inline;
@@ -128,6 +128,7 @@ type
     class function GetPathToCache: string; static; inline;
     class function GetPathToLemmings(const aStylename: string): string; static; inline;
     class function GetPathToMusics(const aStylename: string): string; static; inline;
+    class function GetPathToSounds: string; static; inline;
     class function GetResourceNameZippedLemmings(const aStylename: string): string; static; inline;
     class function GetResourceNameZippedMusics(const aStylename: string): string; static; inline;
   // filename
@@ -137,7 +138,7 @@ type
     class procedure Check; static; inline;
   public
     class constructor Create;
-    class procedure Init(const aPathToStyles, aPathToMusic: string); static; // must be called at startup
+    class procedure Init(const aPathToStyles, aPathToMusic, aPathToSounds: string); static; // must be called at startup
     class procedure Done; static;
     class procedure SetStyleName(const aName: string); static;
   // styledef
@@ -219,7 +220,7 @@ begin
   fPathToStyles := fCachedAppPath + 'Data\Styles\';
 end;
 
-class procedure Consts.Init(const aPathToStyles, aPathToMusic: string);
+class procedure Consts.Init(const aPathToStyles, aPathToMusic, aPathToSounds: string);
 const
   Texts: array[TStyleDef] of string = ('Original Lemmings', 'Oh No More Lemmings!', 'Holiday Lemmings 1993', 'Holiday Lemmings 1994', 'Xmas Lemmings 1991', 'Xmas Lemmings 1992', 'User Lemmings');
 var
@@ -231,6 +232,9 @@ begin
 
   if not aPathToMusic.IsEmpty and TDirectory.Exists(aPathToMusic) then
     fPathToMusic := IncludeTrailingPathDelimiter(aPathToMusic);
+
+  if not aPathToSounds.IsEmpty and TDirectory.Exists(aPathToSounds) then
+    fPathToSounds := IncludeTrailingPathDelimiter(aPathToSounds);
 
   fStyleInformationList := TStyleInformationList.Create;
 
@@ -357,11 +361,6 @@ begin
   Result := GetPathToData + 'Particles\';
 end;
 
-class function Consts.GetPathToSounds: string;
-begin
-  Result := GetPathToData + 'Sounds\';
-end;
-
 class function Consts.GetPathToStyles: string;
 begin
   Result := fPathToStyles;//GetPathToData + 'Styles\';
@@ -400,6 +399,15 @@ begin
     Result := fPathToMusic
   else
     Result := GetPathToLemmings(aStyleName) + 'Music\';
+end;
+
+class function Consts.GetPathToSounds: string;
+begin
+  Check;
+  if not fPathToSounds.IsEmpty then
+    Result := fPathToSounds
+  else
+    Result := GetPathToData + 'Sounds\';
 end;
 
 class function Consts.GetResourceNameZippedLemmings(const aStylename: string): string;

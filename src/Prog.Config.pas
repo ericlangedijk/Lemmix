@@ -51,6 +51,7 @@ type
     Monitor: Integer;
     PathToStyles: string;
     PathToMusic: string;
+    PathToSounds: string;
     procedure Load;
     procedure Save;
   // music options
@@ -172,6 +173,10 @@ begin
     value := list.Values['PathToMusic'];
     if not value.IsEmpty then
       PathToMusic := value;
+    // path to sounds
+    value := list.Values['PathToSounds'];
+    if not value.IsEmpty then
+      PathToSounds := value;
 
   finally
     list.Free;
@@ -227,6 +232,10 @@ begin
     // path
     if PathToStyles <> '' then
       list.Values['PathToMusic'] := PathToMusic;
+
+    // path
+    if PathToSounds <> '' then
+      list.Values['PathToSounds'] := PathToSounds;
 
     list.Sort;
     list.SaveToFile(filename);

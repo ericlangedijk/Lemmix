@@ -248,12 +248,19 @@ type
     BearTrap,           // trap sound
     ElectroTrap,        // trap sound
     SpinningTrap,       // trap sound
-    SquishingTrap       // trap sound
+    SquishingTrap,      // trap sound
+    Miner,              // custom sound
+    Digger,             // custom sound
+    Basher,             // custom sound
+    OpenUmbrella,       // custom sound
+    SilentDeath,        // custom sound
+    Nuke                // custom sound
   );
 
   TSoundEffectHelper = record helper for TSoundEffect
   public
-    function AsFileName: string;
+    function AsFileName(const ext: string): string;
+    function IsCustom: Boolean; inline;
   end;
 
   TMechanicsHelper = record helper for TMechanics
@@ -265,9 +272,14 @@ implementation
 
 { TSoundEffectHelper }
 
-function TSoundEffectHelper.AsFileName: string;
+function TSoundEffectHelper.AsFileName(const ext: string): string;
 begin
-  Result := Enum.AsString(Self) + '.WAV';
+  Result := Enum.AsString(Self) + ext;
+end;
+
+function TSoundEffectHelper.IsCustom: Boolean;
+begin
+  Result := Self >= TSoundEffect.Miner;
 end;
 
 { TMechanicsHelper }

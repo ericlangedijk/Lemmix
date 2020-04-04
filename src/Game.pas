@@ -23,6 +23,7 @@ type
   TGameInfoRec = record
     Style                        : TStyle;
     Renderer                     : TRenderer;
+    SoundMgr                     : TSoundMgr;
     TargetBitmap                 : TBitmap32;
     Level                        : TLevel;
     LevelLoadingInfo             : TLevelLoadingInformation;
@@ -271,9 +272,9 @@ type
     fMinimapBuffer               : TBitmap32;                  // drawing buffer minimap
     fRecorder                    : TRecorder;
     MessageList                  : TGameMessageList;
-    SoundMgr                     : TSoundMgr;
     ReplayCursor                 : TReplayCursor;
   // reference objects, mostly for easy access
+    fSoundMgr                    : TSoundMgr;                  // ref
     fTargetBitmap                : TBitmap32;                  // ref to the drawing bitmap on the gamewindow
     fRenderer                    : TRenderer;                  // ref to gameparams.renderer
     fInfoPainter                 : TSkillPanelToolbar;         // ref to skillpanel for drawing
@@ -356,25 +357,27 @@ type
     fExplodingPixelsUpdateNeeded : Boolean;
     fLastNonPrioritizedLemming   : TLemming;                   // RightClickGlitch emulation (user optional mechanic)
     fAssignmentIsRightClickGlitch: Boolean;                    // storage of the bug. global because we do not want extra parameters in AssignSkill
-  // sound indices in soundmgr
-    SFX_BUILDER_WARNING          : Integer;
-    SFX_ASSIGN_SKILL             : Integer;
-    SFX_YIPPEE                   : Integer;
-    SFX_SPLAT                    : Integer;
-    SFX_LETSGO                   : Integer;
-    SFX_ENTRANCE                 : Integer;
-    SFX_VAPORIZING               : Integer;
-    SFX_DROWNING                 : Integer;
-    SFX_EXPLOSION                : Integer;
-    SFX_HITS_STEEL               : Integer;
-    SFX_OHNO                     : Integer;
-    SFX_SKILLBUTTON              : Integer;
-    SFX_ROPETRAP                 : Integer;
-    SFX_TENTON                   : Integer;
-    SFX_BEARTRAP                 : Integer;
-    SFX_ELECTROTRAP              : Integer;
-    SFX_SPINNINGTRAP             : Integer;
-    SFX_SQUISHINGTRAP            : Integer;
+
+//  // sound indices in soundmgr
+//    SFX_BUILDER_WARNING          : Integer;
+//    SFX_ASSIGN_SKILL             : Integer;
+//    SFX_YIPPEE                   : Integer;
+//    SFX_SPLAT                    : Integer;
+//    SFX_LETSGO                   : Integer;
+//    SFX_ENTRANCE                 : Integer;
+//    SFX_VAPORIZING               : Integer;
+//    SFX_DROWNING                 : Integer;
+//    SFX_EXPLOSION                : Integer;
+//    SFX_HITS_STEEL               : Integer;
+//    SFX_OHNO                     : Integer;
+//    SFX_SKILLBUTTON              : Integer;
+//    SFX_ROPETRAP                 : Integer;
+//    SFX_TENTON                   : Integer;
+//    SFX_BEARTRAP                 : Integer;
+//    SFX_ELECTROTRAP              : Integer;
+//    SFX_SPINNINGTRAP             : Integer;
+//    SFX_SQUISHINGTRAP            : Integer;
+//    SFX_MINER                    : Integer;
   // music index in soundmgr
     MUSIC_INDEX                  : Integer;                    // there is one music possible
     fParticleFinishTimer         : Integer;                    // extra frames to enable viewing of explosions
@@ -823,7 +826,7 @@ begin
   MiniMap        := TBitmap32.Create;
   fMinimapBuffer := TBitmap32.Create;
   fRecorder      := TRecorder.Create(Self);
-  SoundMgr       := TSoundMgr.Create;
+//  SoundMgr       := TSoundMgr.Create;
   MessageList    := TGameMessageList.Create;
   ReplayCursor   := TReplayCursor.Create(Self);
   fSoundsToPlay  := TList<Integer>.Create;
@@ -868,25 +871,30 @@ begin
   SkillMethods[TLemmingAction.Ohnoing]      := nil;
   SkillMethods[TLemmingAction.Exploding]    := AssignBomber;
 
-  // todo: maybe put the filenames in consts
-  SFX_BUILDER_WARNING := SoundMgr.AddSoundFromFileName(TSoundEffect.BuilderWarning.AsFileName);
-  SFX_ASSIGN_SKILL    := SoundMgr.AddSoundFromFileName(TSoundEffect.AssignSkill.AsFileName);
-  SFX_YIPPEE          := SoundMgr.AddSoundFromFileName(TSoundEffect.Yippee.AsFileName);
-  SFX_SPLAT           := SoundMgr.AddSoundFromFileName(TSoundEffect.Splat.AsFileName);
-  SFX_LETSGO          := SoundMgr.AddSoundFromFileName(TSoundEffect.LetsGo.AsFileName);
-  SFX_ENTRANCE        := SoundMgr.AddSoundFromFileName(TSoundEffect.EntranceOpening.AsFileName);
-  SFX_VAPORIZING      := SoundMgr.AddSoundFromFileName(TSoundEffect.Vaporizing.AsFileName);
-  SFX_DROWNING        := SoundMgr.AddSoundFromFileName(TSoundEffect.Drowning.AsFileName);
-  SFX_EXPLOSION       := SoundMgr.AddSoundFromFileName('Explosion3.WAV'{TSoundEffect.Explosion.AsFileName});
-  SFX_HITS_STEEL      := SoundMgr.AddSoundFromFileName(TSoundEffect.HitsSteel.AsFileName);
-  SFX_OHNO            := SoundMgr.AddSoundFromFileName(TSoundEffect.Ohno.AsFileName);
-  SFX_SKILLBUTTON     := SoundMgr.AddSoundFromFileName(TSoundEffect.SkillButtonSelect.AsFileName);
-  SFX_ROPETRAP        := SoundMgr.AddSoundFromFileName(TSoundEffect.RopeTrap.AsFileName);
-  SFX_TENTON          := SoundMgr.AddSoundFromFileName(TSoundEffect.TenTonTrap.AsFileName);
-  SFX_BEARTRAP        := SoundMgr.AddSoundFromFileName(TSoundEffect.BearTrap.AsFileName);
-  SFX_ELECTROTRAP     := SoundMgr.AddSoundFromFileName(TSoundEffect.ElectroTrap.AsFileName);
-  SFX_SPINNINGTRAP    := SoundMgr.AddSoundFromFileName(TSoundEffect.SpinningTrap.AsFileName);
-  SFX_SQUISHINGTRAP   := SoundMgr.AddSoundFromFileName(TSoundEffect.SquishingTrap.AsFileName);
+
+//  // initialize sounds
+//  SFX_BUILDER_WARNING := SoundMgr.AddSoundFromFileName(TSoundEffect.BuilderWarning.AsFileName);
+//  SFX_ASSIGN_SKILL    := SoundMgr.AddSoundFromFileName(TSoundEffect.AssignSkill.AsFileName);
+//  SFX_YIPPEE          := SoundMgr.AddSoundFromFileName(TSoundEffect.Yippee.AsFileName);
+//  SFX_SPLAT           := SoundMgr.AddSoundFromFileName(TSoundEffect.Splat.AsFileName);
+//  SFX_LETSGO          := SoundMgr.AddSoundFromFileName(TSoundEffect.LetsGo.AsFileName);
+//  SFX_ENTRANCE        := SoundMgr.AddSoundFromFileName(TSoundEffect.EntranceOpening.AsFileName);
+//  SFX_VAPORIZING      := SoundMgr.AddSoundFromFileName(TSoundEffect.Vaporizing.AsFileName);
+//  SFX_DROWNING        := SoundMgr.AddSoundFromFileName(TSoundEffect.Drowning.AsFileName);
+//  SFX_EXPLOSION       := SoundMgr.AddSoundFromFileName('Explosion3.WAV'{TSoundEffect.Explosion.AsFileName});
+//  SFX_HITS_STEEL      := SoundMgr.AddSoundFromFileName(TSoundEffect.HitsSteel.AsFileName);
+//  SFX_OHNO            := SoundMgr.AddSoundFromFileName(TSoundEffect.Ohno.AsFileName);
+//  SFX_SKILLBUTTON     := SoundMgr.AddSoundFromFileName(TSoundEffect.SkillButtonSelect.AsFileName);
+//  SFX_ROPETRAP        := SoundMgr.AddSoundFromFileName(TSoundEffect.RopeTrap.AsFileName);
+//  SFX_TENTON          := SoundMgr.AddSoundFromFileName(TSoundEffect.TenTonTrap.AsFileName);
+//  SFX_BEARTRAP        := SoundMgr.AddSoundFromFileName(TSoundEffect.BearTrap.AsFileName);
+//  SFX_ELECTROTRAP     := SoundMgr.AddSoundFromFileName(TSoundEffect.ElectroTrap.AsFileName);
+//  SFX_SPINNINGTRAP    := SoundMgr.AddSoundFromFileName(TSoundEffect.SpinningTrap.AsFileName);
+//  SFX_SQUISHINGTRAP   := SoundMgr.AddSoundFromFileName(TSoundEffect.SquishingTrap.AsFileName);
+//
+//  // custom sounds
+//  SFX_MINER           := SoundMgr.AddSoundFromFileName('C:\Lemmix\Data\Sounds\Miner.mp3', True);
+
 end;
 
 destructor TLemmingGame.Destroy;
@@ -899,7 +907,6 @@ begin
   MiniMap.Free;
   fMinimapBuffer.Free;
   fRecorder.Free;
-  SoundMgr.Free;
   MessageList.Free;
   ReplayCursor.Free;
   fSoundsToPlay.Free;
@@ -919,6 +926,7 @@ begin
   fSoundOpts := aInfo.SoundOpts;
   fRenderer := aInfo.Renderer;
   fTargetBitmap := aInfo.TargetBitmap;
+  fSoundMgr := aInfo.SoundMgr;
   fLevel := aInfo.Level;
   fStyle := aInfo.Style;
   fGraph := aInfo.GraphicSet;
@@ -1011,11 +1019,11 @@ begin
 
   if (fLevelLoadingInfo.MusicFileName <> '') then begin
     if not fUseShuffledMusic then
-      MUSIC_INDEX := SoundMgr.AddMusicFromFileName(fLevelLoadingInfo.MusicFileName, fLevelLoadingInfo.MusicStreamType)
+      MUSIC_INDEX := fSoundMgr.AddMusicFromFileName(fLevelLoadingInfo.MusicFileName, fLevelLoadingInfo.MusicStreamType)
     else begin
       var info := fStyle.LevelSystem.SelectRandomLevel;
       if Assigned(info) and (info.MusicFileName <> '') then
-        MUSIC_INDEX := SoundMgr.AddMusicFromFileName(info.MusicFileName, info.MusicStreamType)
+        MUSIC_INDEX := fSoundMgr.AddMusicFromFileName(info.MusicFileName, info.MusicStreamType)
     end;
   end
   else
@@ -1353,7 +1361,7 @@ begin
       begin
         L.ExplosionTimer := 0;
         L.xDelta := 0;
-        CueSoundEffect(SFX_SPLAT)
+        CueSoundEffect(SoundData.SFX_SPLAT)
       end;
     TLemmingAction.Blocking:
       begin
@@ -1362,7 +1370,7 @@ begin
         SetBlockerField(L);
       end;
     TLemmingAction.Exiting:
-      CueSoundEffect(SFX_YIPPEE);
+      CueSoundEffect(SoundData.SFX_YIPPEE);
     TLemmingAction.Digging:
       L.IsNewDigger := True;
     TLemmingAction.Falling:
@@ -1372,9 +1380,9 @@ begin
       L.NumberOfBricksLeft := 12;
     TLemmingAction.Ohnoing:
       if not UserSetNuking then
-        CueSoundEffect(SFX_OHNO);
+        CueSoundEffect(SoundData.SFX_OHNO);
     TLemmingAction.Exploding:
-      CueSoundEffect(SFX_EXPLOSION);
+      CueSoundEffect(SoundData.SFX_EXPLOSION);
     TLemmingAction.Floating:
       L.FloatParametersTableIndex := 0;
     TLemmingAction.Mining:
@@ -1407,7 +1415,7 @@ begin
   if Assigned(Method) then begin
     Result := Method(Lemming1, Lemming2);
     if Assigned(Result) then
-      CueSoundEffect(SFX_ASSIGN_SKILL);
+      CueSoundEffect(SoundData.SFX_ASSIGN_SKILL);
   end;
   fAssignmentIsRightClickGlitch := False;
 end;
@@ -1516,7 +1524,7 @@ begin
 
   if (SelectedLemming.ObjectInFront = DOM_STEEL) then
   begin
-    CueSoundEffect(SFX_HITS_STEEL);
+    CueSoundEffect(SoundData.SFX_HITS_STEEL);
     Exit;
   end
   else if ((SelectedLemming.ObjectInFront = DOM_ONEWAYLEFT) and (SelectedLemming.xDelta <> -1)) or
@@ -1549,7 +1557,7 @@ begin
     Exit;
 
   if (SelectedLemming.ObjectInFront = DOM_STEEL) then begin
-    CueSoundEffect(SFX_HITS_STEEL);
+    CueSoundEffect(SoundData.SFX_HITS_STEEL);
     Exit;
   end
   else if (SelectedLemming.ObjectBelow = DOM_STEEL)
@@ -1701,12 +1709,12 @@ end;
 function TLemmingGame.GetTrapSoundIndex(aDosSoundEffect: Integer): Integer;
 begin
   case aDosSoundEffect of
-    ose_RopeTrap             : Result := SFX_ROPETRAP;
-    ose_SquishingTrap        : Result := SFX_SQUISHINGTRAP;
-    ose_TenTonTrap           : Result := SFX_TENTON;
-    ose_BearTrap             : Result := SFX_BEARTRAP;
-    ose_ElectroTrap          : Result := SFX_ELECTROTRAP;
-    ose_SpinningTrap         : Result := SFX_SPINNINGTRAP;
+    ose_RopeTrap             : Result := SoundData.SFX_ROPETRAP;
+    ose_SquishingTrap        : Result := SoundData.SFX_SQUISHINGTRAP;
+    ose_TenTonTrap           : Result := SoundData.SFX_TENTON;
+    ose_BearTrap             : Result := SoundData.SFX_BEARTRAP;
+    ose_ElectroTrap          : Result := SoundData.SFX_ELECTROTRAP;
+    ose_SpinningTrap         : Result := SoundData.SFX_SPINNINGTRAP;
   else
     Result := -1;
   end;
@@ -1745,7 +1753,7 @@ begin
       begin
         if L.Action <> TLemmingAction.Falling then begin
           Transition(L, TLemmingAction.Exiting);
-          CueSoundEffect(SFX_YIPPEE);
+          CueSoundEffect(SoundData.SFX_YIPPEE);
         end;
       end;
     DOM_FORCELEFT:
@@ -1757,12 +1765,12 @@ begin
     DOM_WATER:
       begin
         Transition(L, TLemmingAction.Drowning);
-        CueSoundEffect(SFX_DROWNING);
+        CueSoundEffect(SoundData.SFX_DROWNING);
       end;
     DOM_FIRE:
       begin
         Transition(L, TLemmingAction.Vaporizing);
-        CueSoundEffect(SFX_VAPORIZING);
+        CueSoundEffect(SoundData.SFX_VAPORIZING);
       end;
   end;
 end;
@@ -2144,6 +2152,10 @@ begin
 
   // fake draw mask in minimap
   MiniMap.PixelS[L.xPos div 16, L.yPos div 8] := 0;
+
+  if Result then
+    CueSoundEffect(SoundData.SFX_DIGGER);
+
 end;
 
 function TLemmingGame.HandleLemming(L: TLemming): Boolean;
@@ -2228,6 +2240,7 @@ begin
 
       if L.yPos > LEMMING_MAX_Y then begin
         RemoveLemming(L);
+        CueSoundEffect(SoundData.SFX_SILENTDEATH);
         Exit;
       end
       else
@@ -2282,13 +2295,14 @@ begin
     if (L.yPos > LEMMING_MAX_Y) then begin
       // #EL 2020-02-23: we changed L.IsRemoved with RemoveLemming(). This was a small bug. But we almost never get here so in 15 years nobody noticed.
       RemoveLemming(L);
+      CueSoundEffect(SoundData.SFX_SILENTDEATH);
       Exit;
     end;
 
-    if (DigOneRow(L, y) = False) then
+    if not DigOneRow(L, y) then
       Transition(L, TLemmingAction.Falling)
     else if (ReadObjectMap(L.xPos, L.yPos) = DOM_STEEL) then begin
-      CueSoundEffect(SFX_HITS_STEEL);
+      CueSoundEffect(SoundData.SFX_HITS_STEEL);
       Transition(L, TLemmingAction.Walking);
     end;
 
@@ -2353,7 +2367,7 @@ begin
 
   // sound
   if (L.Frame = 10) and (L.NumberOfBricksLeft <= 3) then
-    CueSoundEffect(SFX_BUILDER_WARNING);
+    CueSoundEffect(SoundData.SFX_BUILDER_WARNING);
 
   // lay brick
   if (L.Frame = 9) or ( (L.Frame = 10) and (L.NumberOfBricksLeft = 9) ) then begin
@@ -2442,7 +2456,7 @@ begin
         FrontObj := ReadObjectMap(L.xPos + L.xDelta * 8, L.yPos - 8);
 
         if (FrontObj = DOM_STEEL) then
-          CueSoundEffect(SFX_HITS_STEEL);
+          CueSoundEffect(SoundData.SFX_HITS_STEEL);
 
         if (FrontObj = DOM_STEEL)
         or ( (FrontObj = DOM_ONEWAYLEFT) and (L.xDelta <> -1) )
@@ -2461,6 +2475,8 @@ begin
     if (2 <= index) and (index <= 5) then begin
       // frame 2..5 and 18..21 or used for masking
       ApplyBashingMask(L, index - 2);
+      if index = 5 then
+        CueSoundEffect(SoundData.SFX_BASHER);
       // special treatment frame 5 (see txt)
       if L.Frame = 5 then begin
         n := 0;
@@ -2492,6 +2508,7 @@ begin
   end
   else if L.Frame = 2 then begin
     ApplyMinerMask(L, 1, L.xPos + L.xDelta + L.frameLeftdx, L.yPos + 1 + L.frameTopdy);
+    CueSoundEffect(SoundData.SFX_MINER);
     Exit;
   end
   else if L.Frame in [3, 15] then begin
@@ -2511,6 +2528,7 @@ begin
       Inc(L.yPos);
       if (L.yPos > LEMMING_MAX_Y) then begin
         RemoveLemming(L);
+        CueSoundEffect(SoundData.SFX_SILENTDEATH);
         Exit;
       end;
     end;
@@ -2522,7 +2540,7 @@ begin
 
     belowObj := ReadObjectMap(L.xPos, L.yPos);
     if (belowObj = DOM_STEEL) then
-      CueSoundEffect(SFX_HITS_STEEL);
+      CueSoundEffect(SoundData.SFX_HITS_STEEL);
 
     {-------------------------------------------------------------------------------
       Emulating dos-original bug onewayright:
@@ -2553,6 +2571,7 @@ begin
     Inc(L.yPos);
     if (L.yPos > LEMMING_MAX_Y) then begin
       RemoveLemming(L);
+      CueSoundEffect(SoundData.SFX_SILENTDEATH);
       Exit;
     end
     else
@@ -2577,7 +2596,7 @@ begin
       Inc(L.yPos);
       if (L.yPos > LEMMING_MAX_Y) then begin
         RemoveLemming(L);
-        //CueSoundEffect(SFX_DIE); // todo: extended sounds?
+        CueSoundEffect(SoundData.SFX_SILENTDEATH);
         Exit;
       end;
     end; // while
@@ -2634,10 +2653,13 @@ begin
         Inc(minY);
       end;
     end; // while
+    if L.FloatParametersTableIndex = 1 then
+      CueSoundEffect(SoundData.SFX_OPENUMBRELLA);
   end;
 
   if (L.yPos > LEMMING_MAX_Y) then begin
     RemoveLemming(L);
+    CueSoundEffect(SoundData.SFX_SILENTDEATH);
     Exit;
   end
   else
@@ -2706,6 +2728,7 @@ begin
 
     if (L.yPos > LEMMING_MAX_Y) then begin
       RemoveLemming(L);
+      CueSoundEffect(SoundData.SFX_SILENTDEATH);
       Exit;
     end
     else
@@ -2865,8 +2888,8 @@ begin
 
   // hard coded dos frame numbers
   case CurrentIteration of
-    15: CueSoundEffect(SFX_LETSGO);
-    34: CueSoundEffect(SFX_ENTRANCE);
+    15: CueSoundEffect(SoundData.SFX_LETSGO);
+    34: CueSoundEffect(SoundData.SFX_ENTRANCE);
     35:
       begin
         EntrancesOpened := True;
@@ -2881,8 +2904,8 @@ begin
         if fStartupMusicAfterEntrance then begin
           fStartupMusicAfterEntrance := False;
           // prevent restart music if the music already started by user
-          if (TSoundOption.Music in fSoundOpts) and not SoundMgr.MusicIsPlaying[MUSIC_INDEX] then
-            SoundMgr.PlayMusic(MUSIC_INDEX);
+          if (TSoundOption.Music in fSoundOpts) and not fSoundMgr.MusicIsPlaying[MUSIC_INDEX] then
+            fSoundMgr.PlayMusic(MUSIC_INDEX);
         end;
       end;
   end;
@@ -3117,7 +3140,7 @@ begin
         InfoPainter.DrawButtonSelector(fSelectedSkill, False);
         fSelectedSkill := TSkillPanelButton.Climber;
         InfoPainter.DrawButtonSelector(TSkillPanelButton.Climber, True);
-        CueSoundEffect(SFX_SKILLBUTTON);
+        CueSoundEffect(SoundData.SFX_SKILLBUTTON);
         RecordSkillSelection(Value);
       end;
     TSkillPanelButton.Umbrella:
@@ -3127,7 +3150,7 @@ begin
         InfoPainter.DrawButtonSelector(fSelectedSkill, False);
         fSelectedSkill := Value;
         InfoPainter.DrawButtonSelector(fSelectedSkill, True);
-        CueSoundEffect(SFX_SKILLBUTTON);
+        CueSoundEffect(SoundData.SFX_SKILLBUTTON);
         RecordSkillSelection(Value);
       end;
     TSkillPanelButton.Explode:
@@ -3137,7 +3160,7 @@ begin
         InfoPainter.DrawButtonSelector(fSelectedSkill, False);
         fSelectedSkill := Value;
         InfoPainter.DrawButtonSelector(fSelectedSkill, True);
-        CueSoundEffect(SFX_SKILLBUTTON);
+        CueSoundEffect(SoundData.SFX_SKILLBUTTON);
         RecordSkillSelection(Value);
       end;
     TSkillPanelButton.Blocker:
@@ -3147,7 +3170,7 @@ begin
         InfoPainter.DrawButtonSelector(fSelectedSkill, False);
         fSelectedSkill := Value;
         InfoPainter.DrawButtonSelector(fSelectedSkill, True);
-        CueSoundEffect(SFX_SKILLBUTTON);
+        CueSoundEffect(SoundData.SFX_SKILLBUTTON);
         RecordSkillSelection(Value);
       end;
     TSkillPanelButton.Builder:
@@ -3157,7 +3180,7 @@ begin
         InfoPainter.DrawButtonSelector(fSelectedSkill, False);
         fSelectedSkill := Value;
         InfoPainter.DrawButtonSelector(fSelectedSkill, True);
-        CueSoundEffect(SFX_SKILLBUTTON);
+        CueSoundEffect(SoundData.SFX_SKILLBUTTON);
         RecordSkillSelection(Value);
       end;
     TSkillPanelButton.Basher:
@@ -3167,7 +3190,7 @@ begin
         InfoPainter.DrawButtonSelector(fSelectedSkill, False);
         fSelectedSkill := Value;
         InfoPainter.DrawButtonSelector(fSelectedSkill, True);
-        CueSoundEffect(SFX_SKILLBUTTON);
+        CueSoundEffect(SoundData.SFX_SKILLBUTTON);
         RecordSkillSelection(Value);
       end;
     TSkillPanelButton.Miner:
@@ -3177,7 +3200,7 @@ begin
         InfoPainter.DrawButtonSelector(fSelectedSkill, False);
         fSelectedSkill := Value;
         InfoPainter.DrawButtonSelector(fSelectedSkill, True);
-        CueSoundEffect(SFX_SKILLBUTTON);
+        CueSoundEffect(SoundData.SFX_SKILLBUTTON);
         RecordSkillSelection(Value);
       end;
     TSkillPanelButton.Digger:
@@ -3187,7 +3210,7 @@ begin
         InfoPainter.DrawButtonSelector(fSelectedSkill, False);
         fSelectedSkill := Value;
         InfoPainter.DrawButtonSelector(fSelectedSkill, True);
-        CueSoundEffect(SFX_SKILLBUTTON);
+        CueSoundEffect(SoundData.SFX_SKILLBUTTON);
         RecordSkillSelection(Value);
       end;
     TSkillPanelButton.Pause:
@@ -3209,6 +3232,8 @@ begin
       end;
     TSkillPanelButton.Nuke:
       begin
+        if UserSetNuking then
+          Exit;
         // next line of code is the NUKE GLITCH. Changing MaxNumLemmings also allows IN % to be calculated and displayed in-game using the glitch calculation,
         // just like the actual game
         if TMechanic.NukeGlitch in fMechanics then
@@ -3216,6 +3241,7 @@ begin
         UserSetNuking := True;
         ExploderAssignInProgress := True;
         RecordNuke;
+        CueSoundEffect(SoundData.SFX_NUKE);
       end;
   end;
 end;
@@ -3331,25 +3357,17 @@ begin
   if fSoundsToPlay.Count = 0 then
     Exit;
 
-  for var i: integer in fSoundsToPlay do begin
-    SoundMgr.PlaySound(i);
-  end;
+  for var i: integer in fSoundsToPlay do
+    fSoundMgr.PlaySound(i);
 
   fSoundsToPlay.Clear;
-  Exit;
-
-//  if fSoundToPlay <> -1 then begin
-//    SoundMgr.PlaySound(fSoundToPlay);
-//    fSoundToPlay := -1;
-//  end;
 end;
 
 procedure TLemmingGame.CueSoundEffect(aSoundId: Integer);
 // save last sound.
 begin
-  if HyperSpeed or not Playing or (aSoundId < 0) or not (TSoundOption.Sound in fSoundOpts) then
+  if (aSoundId < 0) or HyperSpeed or not Playing or not (TSoundOption.Sound in fSoundOpts) then
     Exit;
-  //fSoundToPlay := aSoundId;
   if fSoundsToPlay.Count < 8 then // i think we have some balance with the soundlib (overlapping sounds)
     fSoundsToPlay.Add(aSoundId);
   if Paused then
@@ -3783,16 +3801,16 @@ begin
     Exit;
   fSoundOpts := Value;
   if not (TSoundOption.Music in fSoundOpts) then
-    SoundMgr.StopMusic(MUSIC_INDEX)
+    fSoundMgr.StopMusic(MUSIC_INDEX)
   else
-    SoundMgr.PlayMusic(MUSIC_INDEX)
+    fSoundMgr.PlayMusic(MUSIC_INDEX)
 end;
 
 procedure TLemmingGame.Terminate;
 begin
   fGameFinished := True;
-  SoundMgr.StopMusic(MUSIC_INDEX);
-  SoundMgr.ClearMusics;
+  fSoundMgr.StopMusic(MUSIC_INDEX);
+  fSoundMgr.ClearMusics;
 end;
 
 
@@ -3805,11 +3823,11 @@ end;
 
 procedure TLemmingGame.ChangeMusicVolume(up: Boolean);
 begin
-  var curr: Single := SoundMgr.GetMusicVolumne(MUSIC_INDEX);
+  var curr: Single := fSoundMgr.GetMusicVolumne(MUSIC_INDEX);
   if up and (curr <= 0.9) then
-    SoundMgr.SetMusicVolume(MUSIC_INDEX, curr + 0.1)
+    fSoundMgr.SetMusicVolume(MUSIC_INDEX, curr + 0.1)
   else if (curr >= 0.1) then
-    SoundMgr.SetMusicVolume(MUSIC_INDEX, curr - 0.1)
+    fSoundMgr.SetMusicVolume(MUSIC_INDEX, curr - 0.1)
 end;
 
 procedure TLemmingGame.Cheat;
@@ -4269,9 +4287,12 @@ end;
 procedure TLemmingGame.SaveCurrentFrameToPng;
 // todo: do this async?
 var
-  fileName: string;
+  t, fileName: string;
 begin
-  filename := Consts.PathToScreenShots + fStyle.Name + '_' + fLevelLoadingInfo.Section.SectionName + fLevelLoadingInfo.LevelIndex.ToString + '.png';
+  t := StripInvalidFileChars(fLevel.Info.Title);
+  if t.IsEmpty then
+    t := 'screenshot';
+  filename := Consts.PathToScreenShots + t + '.png';
   if ForceDir(filename) then begin
     fTargetBitmap.SaveToPng(fileName);
     var png: TPngImage := fTargetBitmap.ToPng;
