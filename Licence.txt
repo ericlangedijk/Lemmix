@@ -21,4 +21,6 @@ freely, subject to the following restrictions:
 
    5. The source contains original data from around 1991 and part of the source of Graphics32 which
    is not owned or written be the author. If anyone has objections to this, I will remove it.
+   
+   6. Thanks to Arjan.
 
