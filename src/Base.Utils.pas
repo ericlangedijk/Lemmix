@@ -11,8 +11,8 @@ uses
   Winapi.Windows, Winapi.Messages,
   System.Types, System.Classes, System.SysUtils, System.TypInfo, System.IniFiles, System.Math, System.Contnrs, System.Generics.Collections,
   System.Rtti, System.IOUtils,
-  Vcl.Forms, Vcl.Imaging.PngImage, Vcl.Graphics, Vcl.Controls,
-  GR32, GR32_LowLevel;
+  Vcl.Forms,
+  GR32;
 
 function InitializeLemmix: Boolean;
 
@@ -77,6 +77,10 @@ procedure Dlg(const s: string);
 {$ifdef debug}
 procedure Log(const v: TValue); overload;
 procedure Log(const v1, v2: TValue); overload;
+procedure Log(const v1, v2, v3: TValue); overload;
+procedure Log(const v1, v2, v3, v4: TValue); overload;
+procedure Log(const v1, v2, v3, v4, v5: TValue); overload;
+procedure Log(const v1, v2, v3, v4, v5, v6: TValue); overload;
 procedure ClearLog;
 {$endif debug}
 
@@ -121,7 +125,6 @@ type
   IMainForm = interface
   ['{24535447-B742-4EB2-B688-825A1AD69349}']
     procedure SwitchToNextMonitor;
-    //procedure Interrupt;
   end;
 
   TDisplayInfo = record
@@ -406,6 +409,26 @@ end;
 procedure Log(const v1, v2: TValue); overload;
 begin
   Log(v1.ToString + ', ' + v2.ToString);
+end;
+
+procedure Log(const v1, v2, v3: TValue); overload;
+begin
+  Log(v1.ToString + ', ' + v2.ToString + ', ' + v3.ToString);
+end;
+
+procedure Log(const v1, v2, v3, v4: TValue); overload;
+begin
+  Log(v1.ToString + ', ' + v2.ToString + ', ' + v3.ToString + ', ' + v4.ToString);
+end;
+
+procedure Log(const v1, v2, v3, v4, v5: TValue); overload;
+begin
+  Log(v1.ToString + ', ' + v2.ToString + ', ' + v3.ToString + ', ' + v4.ToString + ', ' + v5.ToString);
+end;
+
+procedure Log(const v1, v2, v3, v4, v5, v6: TValue); overload;
+begin
+  Log(v1.ToString + ', ' + v2.ToString + ', ' + v3.ToString + ', ' + v4.ToString + ', ' + v5.ToString + ', ' + v6.ToString);
 end;
 
 procedure ClearLog;

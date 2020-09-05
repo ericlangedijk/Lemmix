@@ -45,6 +45,7 @@ type
     procedure HideLoadingLabel;
     procedure LoadingFeedback(const state: string);
     procedure Form_Activate(Sender: TObject);
+    procedure Form_KeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure LMStart(var Msg: TMessage); message LM_START;
     function ShowScreen<T: TBaseDosForm>: TGameScreenType;
     procedure InitDisplay;
@@ -77,7 +78,9 @@ begin
   Cursor := crDefault;
   CreateLoadingLabel;
   fCurrentParamString := ParamStr(1);
+  KeyPreview := False;
   OnActivate := Form_Activate;
+  OnKeyDown := Form_Keydown;
 end;
 
 class procedure TFormMain.SaveError(const s: string);
@@ -166,6 +169,13 @@ begin
   OnActivate := nil;
   Application.OnMessage := App_Message;
   PostMessage(Handle, LM_START, 0, 0);
+end;
+
+procedure TFormMain.Form_KeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  // issue #12 closing screen when error occurred
+  if Key = VK_ESCAPE then
+    Close;
 end;
 
 function TFormMain.ShowScreen<T>: TGameScreenType;
@@ -483,6 +493,7 @@ begin
     App.StyleCache.Load(LoadingFeedback);
 
     // when debugging parameters set fCurrentParamString *right down this line*
+    //fCurrentParamString := 'C:\Data\Delphi\10.3\LemmixEngine\Gen\replay2.lrb';
 
     NewScreen := CheckLoad(False);
     repeat

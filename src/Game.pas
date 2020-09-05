@@ -21,23 +21,24 @@ uses
 // we pass everything to the game preparation with this record
 type
   TGameInfoRec = record
-    Style                        : TStyle;
-    Renderer                     : TRenderer;
-    SoundMgr                     : TSoundMgr;
-    TargetBitmap                 : TBitmap32;
-    Level                        : TLevel;
-    LevelLoadingInfo             : TLevelLoadingInformation;
-    GraphicSet                   : TGraphicSet;
-    SoundOpts                    : TSoundOptions;
-    UseParticles                 : Boolean;
-    UseGradientBridges           : Boolean;
-    ShowReplayMessages           : Boolean;
-    ShowFeedbackMessages         : Boolean;
-    ShowReplayCursor             : Boolean;
-    EnableSkillButtonsWhenPaused : Boolean;
-    UseShuffledMusic             : Boolean;
-    UsePhotoFlashReplayEffect    : Boolean;
-    OptionalMechanics            : TOptionalMechanics;
+    Style                            : TStyle;
+    Renderer                         : TRenderer;
+    SoundMgr                         : TSoundMgr;
+    TargetBitmap                     : TBitmap32;
+    Level                            : TLevel;
+    LevelLoadingInfo                 : TLevelLoadingInformation;
+    GraphicSet                       : TGraphicSet;
+    SoundOpts                        : TSoundOptions;
+    UseParticles                     : Boolean;
+    UseGradientBridges               : Boolean;
+    ShowReplayMessages               : Boolean;
+    ShowFeedbackMessages             : Boolean;
+    ShowReplayCursor                 : Boolean;
+    EnableSkillButtonsWhenPaused     : Boolean;
+    EnableSkillAssignmentsWhenPaused : Boolean;
+    UseShuffledMusic                 : Boolean;
+    UsePhotoFlashReplayEffect        : Boolean;
+    OptionalMechanics                : TOptionalMechanics;
   end;
 
 type
@@ -354,30 +355,10 @@ type
     fUsePhotoFlashEffect         : Boolean;
     fShowReplayCursor            : Boolean;
     fEnableSkillButtonsWhenPaused: Boolean;
+    fEnableSkillAssignmentsWhenPaused: Boolean;
     fExplodingPixelsUpdateNeeded : Boolean;
     fLastNonPrioritizedLemming   : TLemming;                   // RightClickGlitch emulation (user optional mechanic)
     fAssignmentIsRightClickGlitch: Boolean;                    // storage of the bug. global because we do not want extra parameters in AssignSkill
-
-//  // sound indices in soundmgr
-//    SFX_BUILDER_WARNING          : Integer;
-//    SFX_ASSIGN_SKILL             : Integer;
-//    SFX_YIPPEE                   : Integer;
-//    SFX_SPLAT                    : Integer;
-//    SFX_LETSGO                   : Integer;
-//    SFX_ENTRANCE                 : Integer;
-//    SFX_VAPORIZING               : Integer;
-//    SFX_DROWNING                 : Integer;
-//    SFX_EXPLOSION                : Integer;
-//    SFX_HITS_STEEL               : Integer;
-//    SFX_OHNO                     : Integer;
-//    SFX_SKILLBUTTON              : Integer;
-//    SFX_ROPETRAP                 : Integer;
-//    SFX_TENTON                   : Integer;
-//    SFX_BEARTRAP                 : Integer;
-//    SFX_ELECTROTRAP              : Integer;
-//    SFX_SPINNINGTRAP             : Integer;
-//    SFX_SQUISHINGTRAP            : Integer;
-//    SFX_MINER                    : Integer;
   // music index in soundmgr
     MUSIC_INDEX                  : Integer;                    // there is one music possible
     fParticleFinishTimer         : Integer;                    // extra frames to enable viewing of explosions
@@ -482,6 +463,7 @@ type
     procedure SetSoundOpts(const Value: TSoundOptions);
   public
     GameResultRec: TGameResultsRec;
+    SaveToEngineFileAtStartup: Boolean;
     constructor Create;
     destructor Destroy; override;
   // callable
@@ -499,6 +481,7 @@ type
     procedure RegainControl;
     procedure Save(includeGameResult: Boolean);
     procedure SaveCurrentFrameToPng;
+    procedure SaveToEngineFile(const aFileName: string);
     procedure SetGameResult;
     procedure SetSelectedSkill(Value: TSkillPanelButton; MakeActive: Boolean = True);
     procedure Start(aReplay: Boolean = False);
@@ -509,6 +492,7 @@ type
     property CurrentIteration: Integer read fCurrentIteration;
     property CursorPoint: TPoint read fCursorPoint write fCursorPoint;
     property EnableSkillButtonsWhenPaused: Boolean read fEnableSkillButtonsWhenPaused;
+    property EnableSkillAssignmentsWhenPaused: Boolean read fEnableSkillAssignmentsWhenPaused;
     property Fading: Boolean read fFading;
     property FastForward: Boolean read fFastForward write fFastForward;
     property GameFinished: Boolean read fGameFinished;
@@ -937,6 +921,7 @@ begin
   fShowFeedbackMessages := aInfo.ShowFeedbackMessages;
   fUseShuffledMusic := aInfo.UseShuffledMusic;
   fEnableSkillButtonsWhenPaused   := aInfo.EnableSkillButtonsWhenPaused;
+  fEnableSkillAssignmentsWhenPaused := aInfo.EnableSkillAssignmentsWhenPaused;
   fUsePhotoFlashEffect := aInfo.UsePhotoFlashReplayEffect;
   fShowReplayCursor := aInfo.ShowReplayCursor;
   fLastNonPrioritizedLemming := nil;
@@ -995,6 +980,17 @@ begin
   MineMasks[True] := Ani.MineMasksRTLBitmap;
   MineMasks[True].DrawMode := dmCustom;
   MineMasks[True].OnPixelCombine := CombineMaskPixels;
+
+//  var s: string := MineMasks[True].ToMaskText;
+//  var l: tStringList := tstringlist.Create;
+//  l.Text := s;
+//  l.SaveToFile(consts.PathToDebugFiles + '_minemask_RTL.txt');
+//  l.Free;
+//  ExplodeMaskBmp.SaveToPng(consts.PathToDebugFiles + '_explodemask.png');
+//  BashMasks[False].SaveToPng(consts.PathToDebugFiles + '_bashmask_LTR.png');
+//  BashMasks[True].SaveToPng(consts.PathToDebugFiles + '_bashmask_RTL.png');
+//  MineMasks[False].SaveToPng(consts.PathToDebugFiles + '_minemask_LTR.png');
+//  MineMasks[True].SaveToPng(consts.PathToDebugFiles + '_minemask_RTL.png');
 
   // prepare animationbitmaps for drawing (set pixelcombine eventhandlers)
   var ix: Integer := 0;
@@ -1181,6 +1177,12 @@ begin
   SetSelectedSkill(TSkillPanelButton.Climber, True); // default
 
   DrawInitialStatics;
+
+  if not aReplay and SaveToEngineFileAtStartup then begin
+    var f: string := Consts.PathToOutput + StripInvalidFileChars(fLevel.Info.Title) + '.bin';
+    if ForceDir(f) then
+      SaveToEngineFile(f);
+  end;
 
   Playing := True;
 end;
@@ -2789,6 +2791,10 @@ begin
     Exit;
   CheckForGameFinished;
 
+  // issue #14
+  if CurrentIteration = 0 then
+    CheckForReplayAction;
+
   // do not move this!
   if not Paused then // paused is handled by the GUI
     CheckAdjustReleaseRate;
@@ -3082,7 +3088,7 @@ begin
     if (item.LemmingX > 0) and (item.LemmingY > 0)
     and ((item.LemmingX <> storedLemming.xPos) or (item.LemmingY <> storedLemming.yPos)) then begin
       RegainControl;
-      AddCustomMessage('replayaction failed');
+      AddCustomMessage('fail at ' + CurrentIteration.ToString);
       Exit;
     end;
   end;
@@ -3612,9 +3618,7 @@ begin
 end;
 
 procedure TLemmingGame.CheckForReplayAction;
-// this is bad code but works for now
-// all records with the same iterationnumber must be
-// handled here in one atomic moment
+// all records with the same iterationnumber must be handled here in one atomic moment.
 var
   R: TReplayItem;
   Last: Integer;
@@ -3627,6 +3631,7 @@ begin
     fLastRecordedRecordReached := True;
 
   // although it may not be possible to have 2 replay-actions at one iteration we use a while loop: it's the safest method
+  // note: since 2.1.0 skill assignments are optionally possible during pause, so indeed we can have more than one action during a frame.
   while fReplayIndex <= Last do begin
     R := fRecorder.List[fReplayIndex];
     // break if we go beyond the current iteration
@@ -4312,6 +4317,182 @@ begin
   end
   else
     AddCustomMessage('screenshot fail');
+end;
+
+procedure TLemmingGame.SaveToEngineFile(const aFileName: string);
+// engine project code. the records here should have the exact implementation of the bare lemmixengine (other project)
+const
+  WORLD_WIDTH      = 1584;
+  WORLD_HEIGHT     = 160;
+
+  WORLD_PIXEL_SIZE = WORLD_WIDTH * WORLD_HEIGHT;
+  WORLD_BITS_SIZE  = WORLD_PIXEL_SIZE shr 3;
+
+  MAX_TRAP_COUNT  = 32;
+  MAX_STEEL_COUNT = 32;
+
+type
+  TLevelStaticsRec = packed record
+  public
+    HashKey: UInt64;
+    Mechanics: Cardinal;
+    ReleaseRate: Integer;
+    LemmingsCount: Integer;
+    RescueCount: Integer;
+    TimeLimit: Integer;
+    ClimberCount: Integer;
+    FloaterCount: Integer;
+    BomberCount: Integer;
+    BlockerCount: Integer;
+    BuilderCount: Integer;
+    BasherCount: Integer;
+    MinerCount: Integer;
+    DiggerCount: Integer;
+    Title: TLVLTitle;
+  end;
+
+  TLevelTrapRec = packed record
+  public
+    Id: Integer; // ID_TRAP_XXX
+    Left: Integer;
+    Top: Integer;
+    TriggerLeft: Integer;
+    TriggerTop: Integer;
+    TriggerWidth: Integer;
+    TriggerHeight: Integer;
+    Effect: Integer; // TRAP_EFFECT_XXX
+    FrameCount: Integer;
+    AnimationType: Integer; // TRAP_ANIMATIONTYPE_XXX
+  end;
+
+  TLevelSteelRec = packed record
+  public
+    Left: Integer;
+    Top: Integer;
+    Width: Integer;
+    Height: Integer;
+  end;
+
+  TLevelMapRec = packed record
+  public
+    Terrain: array[0..WORLD_BITS_SIZE - 1] of Byte;
+  end;
+
+  TLevelRec = packed record
+    Statics: TLevelStaticsRec;
+    TrapCount: Integer;
+    Traps: array[0..MAX_TRAP_COUNT - 1] of TLevelTrapRec;
+    SteelCount: Integer;
+    Steels: array[0..MAX_STEEL_COUNT - 1] of TLevelSteelRec;
+    MapWidth: Integer;
+    MapHeight: Integer;
+    Map: TLevelMapRec;
+  end;
+
+  PLevelRec = ^TLevelRec;
+
+
+var
+  lev: PLevelRec;
+  metaObj: TMetaObject;
+  ix: Integer;
+  ptr: PByte;
+  shift: Integer;
+begin
+  if (World.Width <> WORLD_WIDTH) or (World.Height <> WORLD_HEIGHT) then
+    Throw('world size mismatch');
+  if fLevel.InteractiveObjects.Count > MAX_TRAP_COUNT then
+    Throw('too many objects');
+  if fLevel.Steels.Count > MAX_STEEL_COUNT then
+    Throw('too much steel');
+
+  New(lev);
+  FillChar(lev^, SizeOf(TLevelRec), 0);
+
+  // statics
+  lev^.Statics.HashKey := fLevelLoadingInfo.GetLevelHash;
+  lev^.Statics.Mechanics := Word(fMechanics);
+  lev^.Statics.ReleaseRate := fLevel.info.ReleaseRate;
+  lev^.Statics.LemmingsCount := fLevel.info.LemmingsCount;
+  lev^.Statics.RescueCount := fLevel.info.RescueCount;
+  lev^.Statics.TimeLimit := fLevel.info.TimeLimit;
+  lev^.Statics.ClimberCount := fLevel.info.ClimberCount;
+  lev^.Statics.FloaterCount := fLevel.info.FloaterCount;
+  lev^.Statics.BomberCount := fLevel.info.BomberCount;
+  lev^.Statics.BlockerCount := fLevel.info.BlockerCount;
+  lev^.Statics.BuilderCount := fLevel.info.BuilderCount;
+  lev^.Statics.BasherCount := fLevel.info.BasherCount;
+  lev^.Statics.MinerCount := fLevel.info.MinerCount;
+  lev^.Statics.DiggerCount := fLevel.info.DiggerCount;
+  lev^.Statics.Title := fLevelLoadingInfo.GetRawLVLTitle;
+
+  // traps
+  ix := 0;
+  lev^.TrapCount := fLevel.InteractiveObjects.Count;
+  for var obj: TInteractiveObject in fLevel.InteractiveObjects do begin
+
+    metaObj := fGraph.MetaObjectList[obj.Identifier];
+
+    lev^.Traps[ix].Id := obj.Identifier;
+    lev^.Traps[ix].Left := obj.Left;
+    lev^.Traps[ix].Top := obj.Top;
+    lev^.Traps[ix].Effect := metaObj.TriggerEffect;
+    lev^.Traps[ix].AnimationType := metaObj.AnimationType;
+    lev^.Traps[ix].FrameCount := metaObj.AnimationFrameCount;
+
+    if obj.Identifier = DOS_OBJECT_ID_ENTRANCE then begin
+      lev^.Traps[ix].TriggerLeft := 24; // home made trigger. the original is not meant to be as trigger area
+      lev^.Traps[ix].TriggerTop := 14;
+      lev^.Traps[ix].TriggerWidth := 1;
+      lev^.Traps[ix].TriggerHeight := 1;
+    end
+    else begin
+      lev^.Traps[ix].TriggerLeft := metaObj.TriggerLeft;
+      lev^.Traps[ix].TriggerTop := metaObj.TriggerTop;
+      lev^.Traps[ix].TriggerWidth := metaObj.TriggerWidth;
+      lev^.Traps[ix].TriggerHeight := metaObj.TriggerHeight;
+    end;
+
+    Inc(ix);
+  end;
+
+  // steel
+  lev^.SteelCount := fLevel.Steels.Count;
+  ix := 0;
+  for var steel: TSteel in fLevel.Steels do begin
+    lev^.Steels[ix].Left := steel.Left;
+    lev^.Steels[ix].Top := steel.Top;
+    lev^.Steels[ix].Width := steel.Width;
+    lev^.Steels[ix].Height := steel.Height;
+    Inc(ix);
+  end;
+
+  // world
+  lev^.MapWidth := World.Width;
+  lev^.MapHeight := World.Height;
+  ptr := @lev^.Map.Terrain[0];
+  for var y := 0 to World.Height - 1 do begin
+    shift := 0;
+    for var x := 0 to World.Width - 1 do begin
+      if World.Pixel[x, y] and ALPHA_TERRAIN <> 0 then
+        ptr^ := ptr^ or (1 shl shift);
+      Inc(shift);
+      if shift > 7 then begin
+        shift := 0;
+        Inc(ptr);
+      end;
+    end;
+  end;
+
+  var stream: TBufferedFileStream := TBufferedFileStream.Create(aFileName, fmCreate);
+  try
+    stream.WriteData(lev^);
+  finally
+    stream.Free;
+  end;
+
+  Dispose(lev);
+
 end;
 
 end.

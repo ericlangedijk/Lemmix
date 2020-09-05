@@ -100,7 +100,8 @@ type
     EnableSkillButtonsWhenPaused,
     RepairCustomLevelErrors,
     UseShuffledMusic,
-    UsePhotoFlashReplayEffect
+    UsePhotoFlashReplayEffect,
+    EnableSkillAssignmentsWhenPaused
   );
   TMiscOptions = set of TMiscOption;
 

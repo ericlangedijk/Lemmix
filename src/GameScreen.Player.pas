@@ -73,36 +73,36 @@ type
     procedure StartReplayFromFile(const aFileName: string);
     procedure InitializeCursor;
   private
-    fGame                         : TLemmingGame;      // reference to App.Game
-    Img                           : TImage32;          // the image in which the level is drawn (reference to inherited ScreenImg!)
-    SkillPanel                    : TSkillPanelToolbar;// our good old dos skill panel
-    MustForceUpdateOneFrame       : Boolean;           // used when paused
-    FrameTimer                    : TTicker;
-    ScrollTimer                   : TTicker;
-    GameScroll                    : TGameScroll;       // scrollmode
-    MouseScroll                   : Boolean;           // input scroll = mouse
-    KeyBoardScroll                : Boolean;           // input scroll = keyboard
-    KeyBoardPageScroll            : Boolean;           // scroll a whole screen by keyboard
-    MouseClipRect                 : TRect;             // we clip the mouse when there is more space
-    fPlayLock                     : Integer;           // use in idle en set to false whenever we don't want to play
-    fClipLock                     : Integer;           // used when showing a dialog
-    HCursor1                      : HCURSOR;           // normal play cursor
-    HCursor2                      : HCURSOR;           // highlight play cursor
-    LemCursorIconInfo             : TIconInfo;         // normal play cursor icon
-    LemSelCursorIconInfo          : TIconInfo;         // highlight play cursor icon
-    MaxDisplayScale               : Integer;           // calculated in constructor
-    DisplayScale                  : Integer;           // what's the zoomfactor (mostly 2, 3 or 4. in 2020 it is 5. highdpi monitor behaviour unknown yet)
-    MinScroll                     : Single;            // scroll boundary for image
-    MaxScroll                     : Single;            // scroll boundary for image
-    fSaveStateIteration           : Integer;           // one savestate
-//    fScrollSpeed                  : Integer;
-    fLastShiftState               : TShiftState;       // set in keyup en keydown events, used in keypress
-    fMaximizingReleaseRate        : Boolean;           // only when pausing!
-    fMinimizingReleaseRate        : Boolean;           // only when pausing!
-    fLastNukeKeyTick              : Int64;
-    fApplicationWasDeactivated    : Boolean;
-    fMousePosBeforeDeactivation   : TPoint;
-    fScreenshotBuffer             : TBitmap;
+    fGame                             : TLemmingGame;      // reference to App.Game
+    Img                               : TImage32;          // the image in which the level is drawn (reference to inherited ScreenImg!)
+    SkillPanel                        : TSkillPanelToolbar;// our good old dos skill panel
+    MustForceUpdateOneFrame           : Boolean;           // used when paused
+    FrameTimer                        : TTicker;
+    ScrollTimer                       : TTicker;
+    GameScroll                        : TGameScroll;       // scrollmode
+    MouseScroll                       : Boolean;           // input scroll = mouse
+    KeyBoardScroll                    : Boolean;           // input scroll = keyboard
+    KeyBoardPageScroll                : Boolean;           // scroll a whole screen by keyboard
+    MouseClipRect                     : TRect;             // we clip the mouse when there is more space
+    fPlayLock                         : Integer;           // use in idle en set to false whenever we don't want to play
+    fClipLock                         : Integer;           // used when showing a dialog
+    HCursor1                          : HCURSOR;           // normal play cursor
+    HCursor2                          : HCURSOR;           // highlight play cursor
+    LemCursorIconInfo                 : TIconInfo;         // normal play cursor icon
+    LemSelCursorIconInfo              : TIconInfo;         // highlight play cursor icon
+    MaxDisplayScale                   : Integer;           // calculated in constructor
+    DisplayScale                      : Integer;           // what's the zoomfactor (mostly 2, 3 or 4. in 2020 it is 5. highdpi monitor behaviour unknown yet)
+    MinScroll                         : Single;            // scroll boundary for image
+    MaxScroll                         : Single;            // scroll boundary for image
+    fSaveStateIteration               : Integer;           // one savestate
+//    fScrollSpeed                      : Integer;
+    fLastShiftState                   : TShiftState;       // set in keyup en keydown events, used in keypress
+    fMaximizingReleaseRate            : Boolean;           // only when pausing!
+    fMinimizingReleaseRate            : Boolean;           // only when pausing!
+    fLastNukeKeyTick                  : Int64;
+    fApplicationWasDeactivated        : Boolean;
+    fMousePosBeforeDeactivation       : TPoint;
+    fScreenshotBuffer                 : TBitmap;
   // overridden
   protected
     procedure ScaleControlsForDpi(NewPPI: Integer); override;
@@ -571,7 +571,7 @@ begin
     // normal
     Game.RightMouseButtonHeldDown := ssRight in Shift;
     if Button = mbLeft then begin
-      HandleClick := not Game.Paused and not Game.FastForward { or UseClicksWhenPaused};
+      HandleClick := (not Game.Paused or Game.EnableSkillAssignmentsWhenPaused) and not Game.FastForward;
       if HandleClick then
         Game.ProcessSkillAssignment;
     end;
@@ -718,23 +718,24 @@ begin
   App.TargetBitmap := Img.Bitmap;
 
   // fill game info and prepare game
-  GameInfo.Style                        := App.Style;
-  GameInfo.Renderer                     := App.Renderer;
-  GameInfo.TargetBitmap                 := App.TargetBitmap;
-  GameInfo.SoundMgr                     := App.SoundMgr;
-  GameInfo.Level                        := App.Level;
-  GameInfo.LevelLoadingInfo             := App.CurrentLevelInfo;
-  GameInfo.GraphicSet                   := App.GraphicSet;
-  GameInfo.SoundOpts                    := App.Config.SoundOptions;
-  GameInfo.UseParticles                 := App.Config.ShowParticles;
-  GameInfo.UseGradientBridges           := App.Config.GradientBridges;
-  GameInfo.ShowReplayMessages           := TMiscOption.ShowReplayMessages in App.Config.MiscOptions;
-  GameInfo.ShowFeedbackMessages         := TMiscOption.ShowFeedbackMessages in App.Config.MiscOptions;
-  GameInfo.EnableSkillButtonsWhenPaused := TMiscOption.EnableSkillButtonsWhenPaused in App.Config.MiscOptions;
-  GameInfo.UseShuffledMusic             := TMiscOption.UseShuffledMusic in App.Config.MiscOptions;
-  GameInfo.ShowReplayCursor             := TMiscOption.ShowReplayCursor in App.Config.MiscOptions;
-  GameInfo.UsePhotoFlashReplayEffect    := TMiscOption.UsePhotoFlashReplayEffect in App.Config.MiscOptions;
-  GameInfo.OptionalMechanics            := App.Config.OptionalMechanics;
+  GameInfo.Style                            := App.Style;
+  GameInfo.Renderer                         := App.Renderer;
+  GameInfo.TargetBitmap                     := App.TargetBitmap;
+  GameInfo.SoundMgr                         := App.SoundMgr;
+  GameInfo.Level                            := App.Level;
+  GameInfo.LevelLoadingInfo                 := App.CurrentLevelInfo;
+  GameInfo.GraphicSet                       := App.GraphicSet;
+  GameInfo.SoundOpts                        := App.Config.SoundOptions;
+  GameInfo.UseParticles                     := App.Config.ShowParticles;
+  GameInfo.UseGradientBridges               := App.Config.GradientBridges;
+  GameInfo.ShowReplayMessages               := TMiscOption.ShowReplayMessages in App.Config.MiscOptions;
+  GameInfo.ShowFeedbackMessages             := TMiscOption.ShowFeedbackMessages in App.Config.MiscOptions;
+  GameInfo.EnableSkillButtonsWhenPaused     := TMiscOption.EnableSkillButtonsWhenPaused in App.Config.MiscOptions;
+  GameInfo.EnableSkillAssignmentsWhenPaused := TMiscOption.EnableSkillAssignmentsWhenPaused in App.Config.MiscOptions;
+  GameInfo.UseShuffledMusic                 := TMiscOption.UseShuffledMusic in App.Config.MiscOptions;
+  GameInfo.ShowReplayCursor                 := TMiscOption.ShowReplayCursor in App.Config.MiscOptions;
+  GameInfo.UsePhotoFlashReplayEffect        := TMiscOption.UsePhotoFlashReplayEffect in App.Config.MiscOptions;
+  GameInfo.OptionalMechanics                := App.Config.OptionalMechanics;
 
   fGame.Prepare(GameInfo);
 
@@ -885,8 +886,14 @@ begin
         end;
       end;
 
+    'b':
+      if Game.Paused then begin
+        GotoIteration(Game.CurrentIteration - 2);
+        Game.Paused := True;
+      end;
+
     // test method ClipCursor
-    'b': Game.SaveCurrentFrameToPng;
+    'p': Game.SaveCurrentFrameToPng;
 
     // toggle fastforward
     'f': if not Game.Paused then begin
@@ -920,12 +927,6 @@ begin
       begin
         // todo: convert / overwrite current replayfile to output
         // todo: convert / overwrite current replayfile direct!
-      end;
-
-    'p':
-      if Game.Paused then begin
-        GotoIteration(Game.CurrentIteration - 2);
-        Game.Paused := True;
       end;
 
     // start replay

@@ -1,7 +1,7 @@
 {-------------------------------------------------------------------------------
   #0: some program info
 -------------------------------------------------------------------------------}
-{$define beta} // affects programname
+{.$define beta} // affects programname (2.1.0 is the first non-beta)
 
 {-------------------------------------------------------------------------------
   #1: compiler directives. do not change these
