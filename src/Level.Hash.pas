@@ -10,6 +10,7 @@ uses
   Dos.Structures;
 
 // Note: after release never change the hashing of levelcodes
+// so.. do *not* change the code here
 type
   TLevelHasher = class sealed
   private

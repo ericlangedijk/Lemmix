@@ -5,18 +5,17 @@ unit Prog.Cache;
 interface
 
 uses
-  System.Classes, System.Contnrs, System.SysUtils, System.IOUtils, System.Generics.Collections, System.Character,
+  System.Types, System.Classes, System.Contnrs, System.SysUtils, System.IOUtils, System.Generics.Collections, System.Character,
   Dos.Structures,
-  Base.Utils,
+  Base.Utils, Base.Types,
   Level.Hash,
   Styles.Base, Styles.Factory,
-  Prog.Types, Prog.Base;
+  Prog.Base;
 
 type
+
   // the style cache builds lists of all styles with levelhashes + titles.
   // this is needed to be able to quickly find levelhashes, levelcodes, replayfiles
-  TStyleCacheFeedbackProc = reference to procedure(const s: string);
-
   TStyleCache = class
   public
     const
@@ -87,7 +86,6 @@ type
       TLevelCacheItem = class
       private
         fStyleName: string;
-        //Family: TStyleFamily; todo
         fSectionIndex: Integer;
         fLevelIndex: Integer;
         fLevelHash: UInt64;
@@ -99,6 +97,7 @@ type
         constructor Create(const aStyleName: string; const aLevelRec: TLevelRec);
         function GetTitleAsString: string;
         function MatchesWithLevelLoadingInformation(info: TLevelLoadingInformation): Boolean;
+        function GenFilenameWithoutExtension: string;
         property StyleName: string read fStyleName;
         property SectionIndex: Integer read fSectionIndex;
         property LevelIndex: Integer read fLevelIndex;
@@ -110,21 +109,13 @@ type
       end;
       TLevelCacheList = TFastObjectList<TLevelCacheItem>;
 
-//      TExactEntry = record
-//        Style: string;
-//        Section: Integer;
-//        Level: Integer;
-//        constructor Create(const aStyle: string; aSection, aLevel: Integer);
-//      end;
-
   private
-    fFlatList: TFastObjectList<TLevelCacheItem>; // todo: make this one the ultimate owner
+    fFlatList: TFastObjectList<TLevelCacheItem>;
     fCache: TObjectDictionary<string, TLevelCacheList>; // key=stylename, value=levels
     fHashCache: TObjectDictionary<UInt64, TLevelCacheList>; // key=levelhash, value=levels which have this hashcode
     fCodeCache: TObjectDictionary<string, TLevelCacheList>; // key=levelcode, value=levels which have this levelcode
     fTitleCache: TObjectDictionary<TLVLTitle, TLevelCacheList>; // key=leveltitle, value=levels which have this title
-//    fExactCache : TObjectDictionary<TExactEntry, TLevelCacheItem>;
-    fOnFeedback: TStyleCacheFeedbackProc; // simple feedback during load
+    fOnFeedback: TFeedbackProc; // simple feedback during load
     fLastState: string;
     procedure Feedback(const state: string);
     function ReadHeader(s: TStream; var header: THeaderRec): Boolean;
@@ -136,19 +127,60 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Load(const aFeedbackProc: TStyleCacheFeedbackProc);
+    procedure Load(const aFeedbackProc: TFeedbackProc);
     function GetCacheFilenames(fullName: Boolean = True): TArray<string>;
     function FindLevelsByHash(const aHash: UInt64): TArray<TLevelCacheItem>;
     function FindLevelsByCode(const aLevelCode: string): TArray<TLevelCacheItem>;
     function FindLevelsByTitle(const aLevelTitle: TLVLTitle): TArray<TLevelCacheItem>;
-//    function FindExactLevel(const aStyleName: string; aSectionIndex, aLevelIndex: Integer): TLevelCacheItem;
+    function FindMatchingLevels(const aLevelTitle: TLVLTitle; const aHash: UInt64): TArray<TLevelCacheItem>;
+    function SelectBestMatchingLevel(const aLevelTitle: TLVLTitle; const aHash: UInt64; out aItem: TLevelCacheItem): Integer;
     function GetLevelCount(const aStyleName: string): Integer;
     function GetTotalLevelCount: Integer;
     procedure ToCsv(const aFilename: string);
     property FlatList: TFastObjectList<TLevelCacheItem> read fFlatList;
   end;
 
+  TReplayCache = class
+  public
+
+    type
+      TReplayCacheItem = class
+      private
+         fFilename: string;
+         fVersion: Integer;
+         fLevelHash: UInt64;
+         fLevelTitle: TLVLTitle;
+         fValid: Boolean;
+         fCreationDate: TDateTime;
+         fActionCount: Integer;
+      public
+        property Filename: string read fFilename;
+        property Version: Integer read fVersion;
+        property LevelHash: UInt64 read fLevelHash;
+        property LevelTitle: TLVLTitle read fLevelTitle;
+        property Valid: Boolean read fValid;
+        property CreationDate: TDateTime read fCreationDate;
+        property ActionCount: Integer read fActionCount;
+      end;
+
+    TReplayCacheList = class(TFastObjectList<TReplayCacheItem>);
+
+  private
+    fFlatList: TReplayCacheList;
+    fHashDict: TObjectDictionary<UInt64, TReplayCacheList>; // for each hash a list of replays
+    fFilenameDict: TObjectDictionary<string, TReplayCacheItem>; // fast search by name
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Load(const aFeedbackProc: TFeedbackProc);
+    procedure AddOrReplace(const filename: string; const untypedheader);
+    property FlatList: TReplayCacheList read fFlatList;
+  end;
+
 implementation
+
+uses
+  Game;
 
 { TStyleCache.THeaderRec }
 
@@ -161,7 +193,7 @@ function TStyleCache.THeaderRec.GetStyleName: string;
 var
   C: Char;
 begin
-  Result := '';
+  Result := string.Empty;
   for var i := 1 to MAX_STYLENAME_LENGTH do begin
     C := StyleName[i];
     if C = #0 then
@@ -179,14 +211,8 @@ end;
 { TStyleCache.TLevelRec }
 
 function TStyleCache.TLevelRec.GetTitle: string;
-var
-  C: AnsiChar;
 begin
-  SetLength(Result, 31);
-  for var i := 0 to 31 do begin
-    C := LevelTitle[i];
-    Result[i + 1] := Char(C);
-  end;
+  Result := LVLTitleAsString(LevelTitle, False);
 end;
 
 procedure TStyleCache.TLevelRec.Clear;
@@ -223,15 +249,16 @@ begin
   fSourceFile := aLevelRec.GetSourceFile;
 end;
 
-function TStyleCache.TLevelCacheItem.GetTitleAsString: string;
-var
-  C: AnsiChar;
+function TStyleCache.TLevelCacheItem.GenFilenameWithoutExtension: string;
 begin
-  SetLength(Result, 31);
-  for var i := 0 to 31 do begin
-    C := fLevelTitle[i];
-    Result[i + 1] := Char(C);
-  end;
+  Result := Styles.Base.GenFilenameWithoutExtension(fStylename, fSectionIndex, fLevelIndex, fLevelTitle);
+//  Result := fStyleName + '.' + Succ(fSectionIndex).ToString + '.' + Succ(fLevelIndex).ToString.PadLeft(3, '0') + '.' + LVLTitleAsString(fLevelTitle, True);
+  //Result := StripInvalidFileChars(Result, False, True, True);
+end;
+
+function TStyleCache.TLevelCacheItem.GetTitleAsString: string;
+begin
+  Result := LVLTitleAsString(fLevelTitle, False);
 end;
 
 function TStyleCache.TLevelCacheItem.MatchesWithLevelLoadingInformation(info: TLevelLoadingInformation): Boolean;
@@ -243,15 +270,6 @@ begin
     (fLevelIndex = info.LevelIndex) and
     (fSourceFile = info.SourceFileName);
 end;
-//
-//{ TStyleCache.TExactEntry }
-//
-//constructor TStyleCache.TExactEntry.Create(const aStyle: string; aSection, aLevel: Integer);
-//begin
-//  Style := aStyle;
-//  Section := aSection;
-//  Level := aLevel;
-//end;
 
 { TStyleCache }
 
@@ -299,10 +317,6 @@ end;
 
 function TStyleCache.ReadLevelInfo(s: TStream; var info: TLevelRec): Boolean;
 begin
-//  if s.ReadData(info) <> SizeOf(info) then
-//    Exit(False);
-//  if info.Id <> 'L' then
-//    Exit(False);
   info.Clear;
 
   if s.Read(info, LEVEL_REC_SIZE_UNTIL_SOURCE_FILE) <> LEVEL_REC_SIZE_UNTIL_SOURCE_FILE then
@@ -432,7 +446,7 @@ begin
       rec.LevelIndex := lev.LevelIndex;
       rec.LevelHash := lev.GetLevelHash; // cachelvl triggered
 
-      Assert(lev.IsCached);
+      {$ifdef paranoid} Assert(lev.IsCached); {$endif}
       LVL := lev.CachedLVL;
 
       rec.Statics.ReleaseRate    := LVL^.SwapProp(LVL^.ReleaseRate);
@@ -495,7 +509,7 @@ begin
   stream := TBufferedFileStream.Create(filename, fmOpenRead);
   try
     if not ReadHeader(stream, header) then
-      Throw('Invalid cache: ' + filename + sLineBreak + 'Please delete this file and restart'); // todo: rewrite cache is needed
+      Throw('Invalid cache: ' + filename + CRLF + 'Please delete this file and restart');
     while ReadLevelInfo(stream, rec) do begin
       var item: TLevelCacheItem := TLevelCacheItem.Create(aStyleName, rec);
       aTargetList.Add(item);
@@ -506,7 +520,7 @@ begin
   end;
 end;
 
-procedure TStyleCache.Load(const aFeedbackProc: TStyleCacheFeedbackProc);
+procedure TStyleCache.Load(const aFeedbackProc: TFeedbackProc);
 const
   method = 'Load';
 var
@@ -514,6 +528,7 @@ var
   style: TStyle;
   list: TLevelCacheList;
 begin
+  TempCursor.Activate;
 
   oldStyleName := Consts.StyleName;
   fOnFeedback := aFeedbackProc;
@@ -523,7 +538,7 @@ begin
     if TDirectory.Exists(Consts.PathToCache) then begin
       var cacheFiles: TArray<string> := TDirectory.GetFiles(Consts.PathToCache, '*.cache');
       for var cachefile in cacheFiles do begin
-        var check: string := ReplaceFileExt(ExtractFileName(cachefile), '');
+        var check: string := ReplaceFileExt(ExtractFileName(cachefile), string.Empty);
         if Consts.IsUserStyle(check) and not TDirectory.Exists(Consts.PathToStyles + check) then
           TFile.Delete(cachefile);
       end;
@@ -538,7 +553,7 @@ begin
         LoadStyleCache(styleinfo.Name, list)
       // otherwise build and load
       else begin
-        Feedback('Cache ' + styleinfo.Name);
+        Feedback('Cache ' + styleinfo.Name + '...');
         // only one style can be loaded in the program so here we trick the system
         Consts.SetStyleName(styleinfo.Name);
         style := TStyleFactory.CreateStyle(True);
@@ -592,8 +607,6 @@ begin
           list.Add(info);
         end;
 
-        // exact
-        //fExactCache.Add(TExactEntry.Create(key, info.SectionIndex, info.LevelIndex), info);
       end;
 
     end;
@@ -614,11 +627,6 @@ begin
     Result := list.ToArray;
 end;
 
-//function TStyleCache.FindExactLevel(const aStyleName: string; aSectionIndex, aLevelIndex: Integer): TLevelCacheItem;
-//begin
-//  //fExactCache.TryGetValue(TExactEntry.Create(aStyleName, aSectionIndex, aLevelIndex), Result);
-//end;
-
 function TStyleCache.FindLevelsByCode(const aLevelCode: string): TArray<TLevelCacheItem>;
 var
   list: TLevelCacheList;
@@ -635,6 +643,48 @@ begin
   Result := nil;
   if fTitleCache.TryGetValue(aLevelTitle, list) then
     Result := list.ToArray;
+end;
+
+function TStyleCache.FindMatchingLevels(const aLevelTitle: TLVLTitle; const aHash: UInt64): TArray<TLevelCacheItem>;
+begin
+  if aHash <> 0 then
+    Result := FindLevelsByHash(aHash)
+  else
+    Result := FindLevelsByTitle(aLevelTitle);
+end;
+
+function TStyleCache.SelectBestMatchingLevel(const aLevelTitle: TLVLTitle; const aHash: UInt64; out aItem: TLevelCacheItem): Integer;
+// select the most 'default' style if there are duplicates
+var
+  resultArray: TArray<TLevelCacheItem>;
+begin
+  resultArray := FindMatchingLevels(aLevelTitle, aHash);
+
+  Result := Length(resultArray);
+  if Result <= 0 then begin
+    aItem := nil;
+    Exit;
+  end;
+
+  if Result = 1 then begin
+    aItem := resultArray[0];
+    Exit;
+  end;
+
+  var highest : Integer := Ord(High(TStyleDef)) + 1;
+  aItem := resultArray[0]; // default result
+
+  if Result > 1 then begin
+    for var test: TLevelCacheItem in resultArray do begin
+      var info: Consts.TStyleInformation := Consts.FindStyleInfo(test.Stylename);
+      if Assigned(info) then begin
+        if Ord(info.StyleDef) < highest then begin
+          aItem := test;
+          highest := Ord(info.StyleDef);
+        end;
+      end;
+    end;
+  end;
 end;
 
 function TStyleCache.GetLevelCount(const aStyleName: string): Integer;
@@ -654,12 +704,17 @@ end;
 
 procedure TStyleCache.ToCsv(const aFilename: string);
 begin
-//    showmessage('titlecachecount = ' + fTitleCache.Count.ToString + sLineBreak + 'codecache count = ' + fCodeCache.Count.ToString);
-//
-    const tab = Chr(9);
     var l: tstringlist := tstringlist.Create;
-    l.add('INDEX' + tab + 'STYLE' + tab + 'SECTION' + tab + 'LEVEL' + tab + 'HASH' + tab + 'HASHDUPS' + tab + 'LEVELCODE' + tab + 'TITLE' + tab +
-          'TITLEDUPS' + tab + 'SOURCE' + tab +
+    l.add('INDEX' + tab +
+          'STYLE' + tab +
+          'SECTION' + tab +
+          'LEVEL' + tab +
+          'HASH' + tab +
+          'HASHDUPS' + tab +
+          'LEVELCODE' + tab +
+          'TITLE' + tab +
+          'TITLEDUPS' + tab +
+          'SOURCE' + tab +
           'RELEASERATE' + tab +
           'LEMMINGSCOUNT' + tab +
           'RESCUECOUNT' + tab +
@@ -730,5 +785,117 @@ begin
     Inc(ix);
   end;
 end;
+
+{ TReplayCache }
+
+constructor TReplayCache.Create;
+begin
+  inherited;
+  fFlatList := TReplayCacheList.Create;
+  fHashDict := TObjectDictionary<UInt64, TReplayCacheList>.Create([doOwnsValues]);
+  fFilenameDict := TObjectDictionary<string, TReplayCacheItem>.Create;
+end;
+
+destructor TReplayCache.Destroy;
+begin
+  fFlatList.Free;
+  fHashDict.Free;
+  fFilenameDict.Free;
+  inherited;
+end;
+
+procedure TReplayCache.AddOrReplace(const filename: string; const untypedheader);
+// called when saving in-game. we use untyped header bacause of cross ref units.
+// if the cache is not yet loaded then exit.
+var
+  header: TReplayFileHeaderRec absolute untypedheader;
+  item: TReplayCacheItem;
+  list: TReplayCacheList;
+begin
+  if fFlatList.Count = 0 then
+    Exit;
+
+  // remove old
+  if fFilenameDict.TryGetValue(filename.ToUpper, item) then begin
+    if fHashDict.TryGetValue(item.LevelHash, list) then
+      list.Remove(item);
+    fFilenameDict.Remove(filename.ToUpper);
+    fFlatList.Remove(item);
+  end;
+
+  // add new
+  item := TReplayCacheItem.Create;
+  item.fValid := True;
+  item.fFilename := filename;
+  if item.fvalid then begin
+    item.fLevelHash := header.Hash;
+    item.fVersion := header.Version;
+    item.fLevelTitle := header.LevelTitle;
+    item.fCreationDate := TFile.GetLastWriteTime(item.fFilename);
+  end;
+  fFlatList.Add(item);
+  fFilenameDict.Add(item.Filename.ToUpper, item);
+
+  if not fHashDict.TryGetValue(item.LevelHash, list) then begin
+    list := TReplayCacheList.Create(False); // no owning objects, that is the flatlist
+    list.Add(item);
+    fHashDict.Add(item.LevelHash, list);
+  end
+  else begin
+    list.Add(item);
+  end;
+
+end;
+
+procedure TReplayCache.Load(const aFeedbackProc: TFeedbackProc);
+var
+  files: TArray<string>;
+  header: TReplayFileHeaderRec;
+begin
+  if fFlatList.Count > 0 then
+    Exit;
+
+  TempCursor.Activate;
+
+  if not TDirectory.Exists(Consts.PathToReplay) then
+    Exit;
+
+  if Assigned(aFeedbackProc) then
+    aFeedbackProc('Loading replay cache');
+
+  files := TDirectory.GetFiles(Consts.PathToReplay, '*.lrb', TSearchOption.soAllDirectories);
+  fFlatList.Clear;
+  fFlatList.Capacity := Length(files);
+
+  for var f: string in files do begin
+    var item: TReplayCacheItem := TReplayCacheItem.Create;
+    item.fValid := TRecorder.LoadHeader(f, header);
+    item.fFilename := f;
+    if item.fvalid then begin
+      item.fLevelHash := header.Hash;
+      item.fVersion := header.Version;
+      item.fLevelTitle := header.LevelTitle;
+      item.fCreationDate := TFile.GetLastWriteTime(item.fFilename);
+    end;
+    fFlatList.Add(item);
+    fFilenameDict.Add(item.Filename.ToUpper, item);
+  end;
+
+  for var item: TReplayCacheItem in fFlatList do begin
+    if not item.Valid or (item.LevelHash = 0) then
+      Continue;
+    var list: TReplayCacheList;
+    if not fHashDict.TryGetValue(item.LevelHash, list) then begin
+      list := TReplayCacheList.Create(False); // no owning objects, that is the flatlist
+      list.Add(item);
+      fHashDict.Add(item.LevelHash, list);
+    end
+    else begin
+      list.Add(item);
+    end;
+  end;
+
+end;
+
 
 end.

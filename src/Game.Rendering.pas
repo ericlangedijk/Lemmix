@@ -20,8 +20,7 @@ interface
 uses
   System.Types, System.Classes, System.SysUtils, System.Contnrs, System.Generics.Collections,
   GR32, GR32_LowLevel,
-  Base.Utils,
-  Prog.Types,
+  Base.Utils, Base.Types,
   Meta.Structures,
   Styles.Base,
   Level.Base;
@@ -45,7 +44,7 @@ type
     property Original: TBitmap32 read fOriginal;
   end;
 
-  TDrawList = class(TObjectList) // todo: use fastobjectlist
+  TDrawList = class(TObjectList)
   private
     function GetItem(Index: Integer): TDrawItem;
   protected
@@ -57,8 +56,10 @@ type
 
   TAnimation = class(TDrawItem)
   private
+    {$ifdef paranoid}
     procedure Check;
     procedure CheckFrame(Bmp: TBitmap32);
+    {$endif}
   protected
     fFrameHeight: Integer;
     fFrameCount: Integer;
@@ -99,12 +100,12 @@ type
     ObjectRenderList   : TDrawList; // list to accelerate object drawing
     Inf                : TRenderInfoRec;
     fWorld             : TBitmap32;
-    procedure CombineTerrainDefault(F: TColor32; var B: TColor32; M: TColor32);
-    procedure CombineTerrainNoOverwrite(F: TColor32; var B: TColor32; M: TColor32);
-    procedure CombineTerrainErase(F: TColor32; var B: TColor32; M: TColor32);
-    procedure CombineObjectDefault(F: TColor32; var B: TColor32; M: TColor32);
-    procedure CombineObjectNoOverwrite(F: TColor32; var B: TColor32; M: TColor32);
-    procedure CombineObjectOnlyOnTerrain(F: TColor32; var B: TColor32; M: TColor32);
+    class procedure CombineTerrainDefault(F: TColor32; var B: TColor32; M: TColor32); static;
+    class procedure CombineTerrainNoOverwrite(F: TColor32; var B: TColor32; M: TColor32); static;
+    class procedure CombineTerrainErase(F: TColor32; var B: TColor32; M: TColor32); static;
+    class procedure CombineObjectDefault(F: TColor32; var B: TColor32; M: TColor32); static;
+    class procedure CombineObjectNoOverwrite(F: TColor32; var B: TColor32; M: TColor32); static;
+    class procedure CombineObjectOnlyOnTerrain(F: TColor32; var B: TColor32; M: TColor32); static;
 
     procedure PrepareTerrainBitmap(Bmp: TBitmap32; DrawingFlags: Byte);
     procedure PrepareObjectBitmap(Bmp: TBitmap32; DrawingFlags: Byte);
@@ -177,6 +178,21 @@ end;
 
 { TAnimation }
 
+{$ifdef paranoid}
+procedure TAnimation.Check;
+begin
+  Assert(fFrameCount <> 0);
+  Assert(Original.Width = fFrameWidth);
+  Assert(fFrameHeight * fFrameCount = Original.Height);
+end;
+
+procedure TAnimation.CheckFrame(Bmp: TBitmap32);
+begin
+  Assert(Bmp.Width = Original.Width);
+  Assert(Bmp.Height * fFrameCount = Original.Height);
+end;
+{$endif}
+
 function TAnimation.CalcFrameRect(aFrameIndex: Integer): TRect;
 begin
   Result.Left := 0;
@@ -190,26 +206,13 @@ begin
   Result := aFrameIndex * fFrameHeight;
 end;
 
-procedure TAnimation.Check;
-begin
-  Assert(fFrameCount <> 0);
-  Assert(Original.Width = fFrameWidth);
-  Assert(fFrameHeight * fFrameCount = Original.Height);
-end;
-
-procedure TAnimation.CheckFrame(Bmp: TBitmap32);
-begin
-  Assert(Bmp.Width = Original.Width);
-  Assert(Bmp.Height * fFrameCount = Original.Height);
-end;
-
 constructor TAnimation.Create(aOriginal: TBitmap32; aFrameCount, aFrameWidth, aFrameHeight: Integer);
 begin
   inherited Create(aOriginal);
   fFrameCount := aFrameCount;
   fFrameWidth := aFrameWidth;
   fFrameHeight := aFrameHeight;
-  Check;
+  {$ifdef paranoid} Check; {$endif}
 end;
 
 procedure TAnimation.GetFrame(Bmp: TBitmap32; aFrameIndex: Integer);
@@ -218,7 +221,7 @@ var
   Y, W: Integer;
   SrcP, DstP: PColor32;
 begin
-  Check;
+  {$ifdef paranoid} Check; {$endif}
   Bmp.SetSize(fFrameWidth, fFrameHeight);
   DstP := Bmp.PixelPtr[0, 0];
   SrcP := Original.PixelPtr[0, CalcTop(aFrameIndex)];
@@ -236,8 +239,10 @@ var
   Y, W: Integer;
   SrcP, DstP: PColor32;
 begin
+  {$ifdef paranoid}
   Check;
   CheckFrame(Bmp);
+  {$endif}
 
   SrcP := Bmp.PixelPtr[0, 0];
   DstP := Original.PixelPtr[0, CalcTop(aFrameIndex)];
@@ -340,13 +345,13 @@ begin
      if (o.Identifier < 0) or (o.Identifier >= GraphicSet.ObjectBitmaps.Count) then
         DoThrow('Invalid object identifier (' + o.Identifier.ToString + '). '
                  + Pred(GraphicSet.ObjectBitmaps.Count).ToString
-                 + '. The error occurred in level ' + levelTitle + sLineBreak
+                 + '. The error occurred in level ' + levelTitle + CRLF
                  + 'Object listindex = ' + Level.InteractiveObjects.IndexOf(o).ToString, method);
 
     for var t: TTerrain in Level.Terrains do
       if (t.Identifier < 0) or (t.Identifier >= GraphicSet.TerrainBitmaps.Count) then
         DoThrow('Invalid terrain identifier (' + t.identifier.ToString + '). The maximum is ' + Pred(GraphicSet.TerrainBitmaps.Count).ToString
-                + '. The error occurred in level ' + levelTitle + sLineBreak
+                + '. The error occurred in level ' + levelTitle + CRLF
                 + 'Terrain listindex = ' + Level.Terrains.IndexOf(t).ToString, method);
   end
   else begin
@@ -379,7 +384,7 @@ end;
 
 { TRenderer }
 
-procedure TRenderer.CombineTerrainDefault(F: TColor32; var B: TColor32; M: TColor32);
+class procedure TRenderer.CombineTerrainDefault(F: TColor32; var B: TColor32; M: TColor32);
 begin
   if F <> 0 then
   begin
@@ -389,7 +394,7 @@ begin
   end;
 end;
 
-procedure TRenderer.CombineTerrainNoOverwrite(F: TColor32; var B: TColor32; M: TColor32);
+class procedure TRenderer.CombineTerrainNoOverwrite(F: TColor32; var B: TColor32; M: TColor32);
 begin
   if (F <> 0) and (B and ALPHA_TERRAIN = 0) then
   begin
@@ -399,13 +404,13 @@ begin
   end;
 end;
 
-procedure TRenderer.CombineTerrainErase(F: TColor32; var B: TColor32; M: TColor32);
+class procedure TRenderer.CombineTerrainErase(F: TColor32; var B: TColor32; M: TColor32);
 begin
   if F <> 0 then
     B := 0;
 end;
 
-procedure TRenderer.CombineObjectDefault(F: TColor32; var B: TColor32; M: TColor32);
+class procedure TRenderer.CombineObjectDefault(F: TColor32; var B: TColor32; M: TColor32);
 begin
   if F <> 0 then begin
     //B := F;
@@ -415,7 +420,7 @@ begin
   end;
 end;
 
-procedure TRenderer.CombineObjectNoOverwrite(F: TColor32; var B: TColor32; M: TColor32);
+class procedure TRenderer.CombineObjectNoOverwrite(F: TColor32; var B: TColor32; M: TColor32);
 begin
   if (F <> 0) and (B and ALPHA_MASK = 0) then begin
     B := B and not COLOR_MASK; // erase color
@@ -424,7 +429,7 @@ begin
   end;
 end;
 
-procedure TRenderer.CombineObjectOnlyOnTerrain(F: TColor32; var B: TColor32; M: TColor32);
+class procedure TRenderer.CombineObjectOnlyOnTerrain(F: TColor32; var B: TColor32; M: TColor32);
 begin
   if (F <> 0) and (B and ALPHA_TERRAIN <> 0) then begin
     B := B and not COLOR_MASK; // erase color
@@ -587,23 +592,24 @@ begin
     end;
   end;
 
-  if not DoObjects then
-    Exit;
+  if DoObjects then begin
 
-  // draw only on terrain
-  for i := 0 to Inf.Level.InteractiveObjects.Count - 1 do begin
-    Obj := Inf.Level.InteractiveObjects.Items[i];
-    MO := Inf.GraphicSet.MetaObjectList[obj.identifier];
-    if odf_OnlyOnTerrain and Obj.DrawingFlags <> 0 then
-      DrawObject(World, Obj, MO.PreviewFrameIndex);
-  end;
+    // draw only on terrain
+    for i := 0 to Inf.Level.InteractiveObjects.Count - 1 do begin
+      Obj := Inf.Level.InteractiveObjects.Items[i];
+      MO := Inf.GraphicSet.MetaObjectList[obj.identifier];
+      if odf_OnlyOnTerrain and Obj.DrawingFlags <> 0 then
+        DrawObject(World, Obj, MO.PreviewFrameIndex);
+    end;
 
-  // draw *not* only on terrain
-  for i := 0 to Inf.Level.InteractiveObjects.Count - 1 do begin
-    Obj := Inf.Level.InteractiveObjects.Items[i];
-    MO := Inf.GraphicSet.MetaObjectList[obj.identifier]; // ["I suppose that's an exception?]
-    if odf_OnlyOnTerrain and Obj.DrawingFlags = 0 then
-      DrawObject(World, Obj, MO.PreviewFrameIndex);
+    // draw *not* only on terrain
+    for i := 0 to Inf.Level.InteractiveObjects.Count - 1 do begin
+      Obj := Inf.Level.InteractiveObjects.Items[i];
+      MO := Inf.GraphicSet.MetaObjectList[obj.identifier]; // ["I suppose that's an exception?" level]
+      if odf_OnlyOnTerrain and Obj.DrawingFlags = 0 then
+        DrawObject(World, Obj, MO.PreviewFrameIndex);
+    end;
+
   end;
 
 end;

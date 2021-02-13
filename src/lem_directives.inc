@@ -1,10 +1,16 @@
 {-------------------------------------------------------------------------------
   #0: some program info
 -------------------------------------------------------------------------------}
-{.$define beta} // affects programname (2.1.0 is the first non-beta)
+{$define beta} // inserts 'beta' into program name
 
 {-------------------------------------------------------------------------------
-  #1: compiler directives. do not change these
+  #1: decrease exe size
+-------------------------------------------------------------------------------}
+{$weaklinkrtti on}
+{$rtti explicit methods([]) properties([]) fields([])}
+
+{-------------------------------------------------------------------------------
+  #2: compiler directives. do not change these
 -------------------------------------------------------------------------------}
 {$pointermath on}                 // must be on
 {$rangechecks off}                // must be off. on = impossible
@@ -12,7 +18,7 @@
 {$scopedenums on}                 // must be on. we like this
 
 {-------------------------------------------------------------------------------
-  #2: release / debug options
+  #3: release / debug options
 -------------------------------------------------------------------------------}
 {$if not defined(debug)}
   {$inline auto}
@@ -31,7 +37,7 @@
     {$assertions off}
     {$referenceinfo off}
   {$else}
-    {.$define paranoid}        // define this to activate some very lowlevel checks (slows down of course)
+    {.$define paranoid}        // define this to activate some very lowlevel checks including lowlevel asserts. slows down of course.
     {$inline off}
     {$optimization off}
     {$debuginfo on}
@@ -41,4 +47,15 @@
   {$ifend}
 {$ifend}
 
-
+{-------------------------------------------------------------------------------
+  #4: debug logging
+-------------------------------------------------------------------------------}
+{$ifdef debug}
+  {.$define logging}
+  {.$define log_remove}
+  {.$define log_transitions}
+  {.$define log_turns}
+  {.$define log_commands}
+  {.$define log_assignments}
+  {.$define log_traptriggering}
+{$endif}

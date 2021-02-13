@@ -12,18 +12,21 @@ unit Form.Main;
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages,
+menus,
+
+
+  Winapi.Windows, Winapi.Messages, Winapi.ShellApi,
   System.UITypes, System.SysUtils, System.Classes, System.IOUtils,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.Imaging.PngImage, Vcl.StdCtrls,
-  Base.Utils, Base.Bitmaps,
+  Base.Utils, Base.Types, Base.Strings, Base.Bitmaps,
   Form.Base, Form.Message,
   Dos.Compression, Dos.Structures,
   Styles.Base, Styles.Factory,
   Level.Base, Level.Hash, Level.Loader,
-  Prog.Types, Prog.Base, Prog.App, Prog.Data, Prog.Cache,
+  Prog.Base, Prog.App, Prog.Data, Prog.Cache, Prog.Voice,
   Game, Game.Sound, Game.Rendering,
   GameScreen.Base, GameScreen.Menu, GameScreen.LevelCode, GameScreen.Preview, GameScreen.Postview, GameScreen.Options,
-  GameScreen.Finder, GameScreen.Config, GameScreen.Player;
+  GameScreen.Finder, GameScreen.ReplayFinder, GameScreen.Player;
 
 type
   TFormMain = class(TBaseForm, IMainForm)
@@ -37,8 +40,8 @@ type
         Hashcode
       );
   private
+    fHourGlassCursor: HCURSOR;
     fLoadingLabel: TLabel;
-    fCurrentRunningScreen: TBaseDosForm;
     fCurrentParamString: string;
     fInterruptingMessageEnabled: Boolean;
     procedure CreateLoadingLabel;
@@ -47,8 +50,9 @@ type
     procedure Form_Activate(Sender: TObject);
     procedure Form_KeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure LMStart(var Msg: TMessage); message LM_START;
-    function ShowScreen<T: TBaseDosForm>: TGameScreenType;
+    function InternalShowScreen<T: TAppForm>(param: TObject = nil): TGameScreenType;
     procedure InitDisplay;
+    procedure CreateHourglassCursor;
     procedure SwitchToNextMonitor; // IMainForm support
     procedure SwitchToMonitor(index: Integer);
     function CheckLoadDAT(const aFilename: string): TStyleCache.TLevelCacheItem;
@@ -75,6 +79,8 @@ implementation
 constructor TFormMain.Create(aOwner: TComponent);
 begin
   inherited Create(aOwner);
+  FormatSettings.ThousandSeparator := '.';
+  FormatSettings.DecimalSeparator := ',';
   Cursor := crDefault;
   CreateLoadingLabel;
   fCurrentParamString := ParamStr(1);
@@ -89,7 +95,9 @@ var
   filename: string;
   isOpen: Boolean;
 begin
-  filename := ExtractFilePath(ParamStr(0)) + 'Output\Logs\Error.log';
+  filename := Consts.PathToErrorLogs + 'Error.log';
+  if not ForceDirectories(filename) then
+    Exit;
   AssignFile(t, filename);
   isOpen := False;
   try
@@ -120,7 +128,7 @@ var
   txt: string;
 begin
   Application.OnIdle := nil;
-  txt := E.message + sLineBreak + 'Exceptionclass: ' + E.Classname;
+  txt := E.message + CRLF + 'Exceptionclass: ' + E.Classname;
   SaveError(txt);
   DlgError(txt);
   Application.Terminate;
@@ -142,6 +150,8 @@ end;
 
 destructor TFormMain.Destroy;
 begin
+  if PROGAM_CURSOR_HOURGLASS <> 0 then
+    DestroyIcon(PROGAM_CURSOR_HOURGLASS);
   inherited;
 end;
 
@@ -178,18 +188,14 @@ begin
     Close;
 end;
 
-function TFormMain.ShowScreen<T>: TGameScreenType;
+function TFormMain.InternalShowScreen<T>(param: TObject = nil): TGameScreenType;
 var
   F: T;
 begin
   F := T.Create(nil);
   try
-    CurrentDisplay.CurrentForm := F;
-    fCurrentRunningScreen := F;
-    Result := F.ShowScreen;
+    Result := F.ShowScreen(param);
   finally
-    CurrentDisplay.CurrentForm := nil;
-    fCurrentRunningScreen := nil;
     F.Free;
   end;
 end;
@@ -272,27 +278,19 @@ function TFormMain.CheckLoadReplay(const aFilename: string): TStyleCache.TLevelC
 // try load replay
 var
   hash: UInt64;
+  version: Byte;
   title: TLVLTitle;
-  ResultArray: TArray<TStyleCache.TLevelCacheItem>;
 begin
-  Result := nil;
-
   // search in levelcache
-  if not TRecorder.LoadTitleAndHashFromHeader(aFileName, hash, title) then begin
-    MessageDlg(aFilename + ' is an invalid replayfile', mtInformation, [mbOK], 0);
-    Exit;
+  if not TRecorder.LoadTitleHashVersionFromHeader(aFileName, hash, version, title) then begin
+    DlgWarning(FormatSimple(gt.SErrorInvalidReplayFile_s, [aFilename]));
+    Exit(nil);
   end;
 
-  if hash <> 0 then
-    ResultArray := App.StyleCache.FindLevelsByHash(hash)
-  else
-    ResultArray := App.StyleCache.FindLevelsByTitle(title);
-  if Length(ResultArray) = 0 then begin
-    MessageDlg(aFilename + ': cannot find the level (' + Trim(string(title)) + ')', mtInformation, [mbOK], 0);
-    Exit;
+  if App.StyleCache.SelectBestMatchingLevel(title, hash, Result) = 0 then begin
+    DlgWarning(FormatSimple(gt.SErrorCannotFindLevelFromReplayFile_ss, [Trim(string(title)), aFilename]));
+    Exit(nil);
   end;
-
-  Result := ResultArray[0];
 end;
 
 function TFormMain.CheckLoadParam(const aFilename: string; out aType: TStartupFiletype): TStyleCache.TLevelCacheItem;
@@ -306,7 +304,7 @@ begin
     Exit;
 
   ext := ExtractFileExt(aFilename).ToUpper;
-  if ext = '' then begin
+  if ext.IsEmpty then begin
     Result := CheckLoadHashcode(aFilename);
     if Assigned(Result) then
       aType := TStartupFiletype.Hashcode;
@@ -340,7 +338,7 @@ procedure TFormMain.SwitchToNextMonitor;
 begin
   if Screen.MonitorCount <= 1 then
     Exit;
-  if not (CurrentDisplay.CurrentForm is TGameMenuScreen) then
+  if not (App.CurrentForm is TGameMenuScreen) then
     Exit;
   var current: Integer := CurrentDisplay.MonitorIndex;
   Inc(current);
@@ -352,45 +350,84 @@ end;
 procedure TFormMain.SwitchToMonitor(index: Integer);
 // change boundsrect to monitor
 var
-  dosForm: TBaseDosForm;
+  appForm: TAppForm;
 begin
   if (index >= Screen.MonitorCount) or (index < 0) then
     index := 0;
   CurrentDisplay.MonitorIndex := index;
   BoundsRect := CurrentDisplay.BoundsRect;
-  if Assigned(CurrentDisplay.CurrentForm) and (CurrentDisplay.CurrentForm is TBaseDosForm) then begin
-    dosForm := TBaseDosForm(CurrentDisplay.CurrentForm);
-    dosForm.BoundsRect := CurrentDisplay.BoundsRect;
+  if Assigned(App.CurrentForm) and (App.CurrentForm is TAppForm) then begin
+    appForm := TAppForm(App.CurrentForm);
+    appForm.BoundsRect := CurrentDisplay.BoundsRect;
   end;
 end;
 
 procedure TFormMain.InitDisplay;
 begin
-  CurrentDisplay.MainForm := Self;
+  App.MainForm := Self;
   SwitchToMonitor(App.Config.Monitor);
 end;
 
+procedure TFormMain.CreateHourglassCursor;
+var
+  bmpColor, bmpMask: TBitmap;
+  info: TIconInfo;
+begin
+  // default game cursor
+  bmpColor := TData.CreateCursorBitmap(Consts.StyleName, Consts.FilenameCursorHourglass);
+  bmpMask  := TData.CreateCursorBitmap(Consts.StyleName, Consts.FilenameCursorHourglassMask);
+
+  info.fIcon := false;
+  info.xHotspot := bmpColor.Width div 2;
+  info.yHotspot := bmpColor.Height div 2;
+  info.hbmMask := bmpMask.Handle;
+  info.hbmColor := bmpColor.Handle;
+
+  fHourGlassCursor := CreateIconIndirect(info);
+  Screen.Cursors[PROGAM_CURSOR_HOURGLASS] := fHourGlassCursor;
+
+  bmpColor.Free;
+  bmpMask.Free;
+end;
+
 procedure TFormMain.App_Message(var Msg: TMsg; var Handled: Boolean);
-// this message is send to this application, when a second lemmix is started (see Base.Utils.InitializeLemmix and .dpr for the magic)
+// this LM_RESTART message is send to this application, when a second lemmix is started.
+// see Base.Utils.InitializeLemmix and Lemmix.dpr for the magic
 begin
   if Msg.message = LM_RESTART then begin
     Handled := True;
     if fInterruptingMessageEnabled
-    and Assigned(fCurrentRunningScreen)
+    and Assigned(App.CurrentForm)
+    and (App.CurrentForm is TAppForm)
     and (Assigned(_LemmixMemoryMappedRecord)) then begin
       fCurrentParamString := _LemmixMemoryMappedRecord.GetAsString;
-      if fCurrentParamString <> '' then
-        fCurrentRunningScreen.CloseScreen(TGameScreenType.Interrupted); // this will be catched in the run method, so we leave this method immediately
+      if not fCurrentParamString.IsEmpty then
+        App.Interrupt; // close top-down all screens
     end;
   end;
 end;
 
 procedure TFormMain.Run;
 
+    procedure SpeakStyle(info: Consts.TStyleInformation);
+    var
+      s: string;
+    begin
+      if not (TVoiceOption.CurrentStyle in App.Config.VoiceOptions) then
+        Exit;
+      s := info.Description;
+      if s.IsEmpty then
+        s := info.Name;
+      // honoring correct ccexplore pronouncation :-)
+      if s.ToLower.Contains('ccexplore') then
+        s := s.Replace('ccexplore', 'c c explore');
+      Speak(s, True);
+    end;
+
     procedure DoRecreateStyle(const aName: string);
     begin
-      LoadingFeedback('Loading');
-      // we do *not* free the style, because it is pooled
+      TempCursor.Activate;
+      // we do *not* free the current style, because it is pooled
       FreeAndNil(App.GraphicSet);
       FreeAndNil(App.Level);
       Consts.SetStyleName(aName);
@@ -400,6 +437,7 @@ procedure TFormMain.Run;
       App.GraphicSet := TGraphicSet.Create(App.Style);
       App.NewStyleName := Consts.StyleName;
       HideLoadingLabel;
+      SpeakStyle(App.Style.StyleInformation);
     end;
 
     procedure CheckRecreateStyle(const newName: string);
@@ -424,20 +462,18 @@ procedure TFormMain.Run;
       cacheItem: TStyleCache.TLevelCacheItem;
     begin
       Result := TGameScreenType.Menu;
-
       fInterruptingMessageEnabled := False; // this will be reset just before showing the next screen
-
       startupFileType := TStartupFiletype.None;
 
       // check opening with LVL or LRB
       startupFile := fCurrentParamString;
       cacheItem := CheckLoadParam(startupFile, {out} startupFiletype);
 
-      if (startupFile <> '') and (cacheItem = nil) then
-        DlgWarning('Could not load ' +  startupFile);
+      if (not startupFile.IsEmpty) and (cacheItem = nil) then
+        DlgWarning(FormatSimple(gt.SErrorCannotStartWithReplayFile_s, [startupfile]));
 
       if not Assigned(cacheItem) then
-        startupFile := ''
+        startupFile := string.Empty
       else
         Consts.SetStyleName(cacheItem.StyleName);
 
@@ -462,7 +498,7 @@ procedure TFormMain.Run;
         end;
         // validation
         if not Assigned (App.CurrentLevelInfo) or not cacheItem.MatchesWithLevelLoadingInformation(App.CurrentLevelInfo) then
-          DlgWarning('Strange mismatch during loading of ' + startupFile + '. Please report the error.');
+          DlgWarning(FormatSimple(gt.SErrorUnexpectedMismatchWhenLoading_s, [startupFile]));
       end
       // and otherwise just start
       else begin
@@ -471,53 +507,62 @@ procedure TFormMain.Run;
       end;
     end;
 
+    procedure CheckLoadLanguage;
+    begin
+      gt.Save('Default.config');
+      if App.Config.LanguageIsDefault then
+        Exit;
+      // pre-check
+      var filename: string := Consts.PathToLanguage + App.Config.Language + '.config'; // do not localize
+      if FileExists(filename) then
+        gt.Load(App.Config.Language + '.config'); // do not localize
+    end;
+
 var
   NewScreen: TGameScreenType;
-
 begin
   Application.OnException := App_Exception;
   if Assigned(_LemmixMemoryMappedRecord) then
     _LemmixMemoryMappedRecord^.ApplicationHandle := Application.Handle;
+
   App := nil;
-  TData.Init;
+
+  CreateHourglassCursor;
   SoundLibrary.Init;
   TStyleFactory.Init;
   try
-
     App := TApp.Create;
+    CheckLoadLanguage;
     App.NewSectionIndex := -1;
     App.NewLevelIndex := -1;
-
     InitDisplay;
     App.StyleCache := TStyleCache.Create;
     App.StyleCache.Load(LoadingFeedback);
 
+    {$ifdef debug}
     // when debugging parameters set fCurrentParamString *right down this line*
-    //fCurrentParamString := 'C:\Data\Delphi\10.3\LemmixEngine\Gen\replay2.lrb';
+    // fCurrentParamString := 'myreplay.lrb';
+    {$endif}
 
     NewScreen := CheckLoad(False);
     repeat
-      CheckRecreateStyle(App.NewStyleName); // recreate style if options screen changed it
+      CheckRecreateStyle(App.NewStyleName); // recreate style if options screen -> menu screen changed it
       CheckGotoLevel;
 
       fInterruptingMessageEnabled := True;
       case NewScreen of
-        TGameScreenType.Menu        : NewScreen := ShowScreen<TGameMenuScreen>;
-        TGameScreenType.Preview     : NewScreen := ShowScreen<TGamePreviewScreen>;
-        TGameScreenType.Play        : NewScreen := ShowScreen<TGameScreenPlayer>;
-        TGameScreenType.Postview    : NewScreen := ShowScreen<TGamePostviewScreen>;
-        TGameScreenType.LevelCode   : NewScreen := ShowScreen<TGameScreenLevelCode>;
-        TGameScreenType.Options     : NewScreen := ShowScreen<TGameScreenOptions>;
-        TGameScreenType.Finder      : NewScreen := ShowScreen<TGameScreenFinder>;
-        TGameScreenType.Config      : NewScreen := ShowScreen<TGameScreenConfig>;
-        TGameScreenType.Interrupted : NewScreen := CheckLoad(True);
+        TGameScreenType.Menu          : NewScreen := InternalShowScreen<TGameMenuScreen>;
+        TGameScreenType.Preview       : NewScreen := InternalShowScreen<TGamePreviewScreen>;
+        TGameScreenType.Play          : NewScreen := InternalShowScreen<TGameScreenPlayer>;
+        TGameScreenType.Postview      : NewScreen := InternalShowScreen<TGamePostviewScreen>;
+        TGameScreenType.LevelCode     : NewScreen := InternalShowScreen<TGameScreenLevelCode>;
+        TGameScreenType.Interrupted   : NewScreen := CheckLoad(True);
         else
-          Break;
+          Break; // unknown, exitprogram
       end;
     until False;
 
   finally
-    TData.Done;
     SoundLibrary.Done;
     App.Free;
     TStyleFactory.Done;
@@ -526,6 +571,9 @@ begin
 
   Close;
 
+  // triggered if config screen -> menu screen changed paths. we need to restart the exe
+  if NewScreen = TGameScreenType.Restart then
+    ShellExecute(0, 'open', PChar(Application.ExeName), nil, nil, SW_SHOWNORMAL);
 end;
 
 end.

@@ -3,20 +3,20 @@ unit GameScreen.LevelCode;
 {$include lem_directives.inc}
 
 interface
-
+// todo: check working of cheatcodes (setting off is not possibel)
 uses
   Windows, Classes, Controls, Graphics, MMSystem, Forms, ClipBrd,
   GR32, GR32_Image, GR32_Layers,
-  Base.Utils,
+  Base.Utils, Base.Types, Base.Strings,
   Dos.Structures,
   Styles.Base,
-  Prog.Types, Prog.Base, Prog.Data, Prog.Strings, Prog.Cache, Prog.App,
+  Prog.Base, Prog.Data, Prog.Cache, Prog.App,
   GameScreen.Base;
 
 type
   TGameScreenLevelCode = class(TGameBaseScreen)
   private
-    const INTERFAL_BLINK = 240;
+    const INTERNAL_BLINK = 240;
   private
     BlinkTimer       : TTicker;
     LevelCode        : string;
@@ -64,8 +64,6 @@ begin
   OnKeyPress := Form_KeyPress;
   OnClose := Form_Close;
 
-  //BlinkSpeedMS := 240;
-
   XPos := (640 - (10 * 16)) div 2;
 
   YPositions[0] := 120;
@@ -78,7 +76,7 @@ begin
   ExtractPurpleFont;
 
   BlinkTimer.Reset(9);
-  BlinkTimer.Interval := INTERFAL_BLINK;
+  BlinkTimer.Interval := INTERNAL_BLINK;
 end;
 
 destructor TGameScreenLevelCode.Destroy;
@@ -97,7 +95,7 @@ begin
     TileBackgroundBitmap(0, 0);
     BackBuffer.Assign(ScreenImg.Bitmap); // save background
 
-    DrawPurpleText(ScreenImg.Bitmap, SEnterCode, XPos, 120);
+    DrawPurpleText(ScreenImg.Bitmap, gt.SLevelCodeScreen_EnterCode, XPos, 120);
     DrawPurpleText(ScreenImg.Bitmap, LevelCode, XPos, YPositions[1]);
 
     UpdateCheatMessage;
@@ -133,36 +131,32 @@ function TGameScreenLevelCode.CheckCheatCode: Boolean;
 var
   S: string;
 begin
-  S := stringreplace(LowerCase(LevelCode), '.', '', [rfReplaceAll]);
-  Result := SameText(S, SCheatCode);
+  S := StringReplace(LowerCase(LevelCode), '.', string.Empty, [rfReplaceAll]);
+  Result := SameText(S, gt.SCheatCode);
 end;
 
 function TGameScreenLevelCode.CheckLevelCode: Boolean;
 var
   s: string;
-//  Sys: TLevelSystem;
   Txt: string;
   info: TLevelLoadingInformation;
-// todo: cheats
 begin
   Result := False;
-//  Validated := True;
-  s := stringreplace(LevelCode, '.', '', [rfReplaceAll]);
+  s := stringreplace(LevelCode, '.', string.Empty, [rfReplaceAll]);
 
   info := FindLevelByCode(s);
 
-  if not Assigned(info) and App.Config.UseCheatCodes then
+  if not Assigned(info) and App.Config.MiscOptions.CheatCodesInLevelCodeScreen then
     info := App.Style.LevelSystem.FindLevelBySectionNameAndNumber(LevelCode);
 
   if Assigned(info) then begin
     App.CurrentLevelInfo := info;
-    Txt := Format(SCodeForLevel_sd, [App.CurrentLevelInfo.Section.SectionName, App.CurrentLevelInfo.LevelIndex + 1]);
+    Txt := FormatSimple(gt.SLevelCodeScreen_CodeForSectionLevel_ss, [App.CurrentLevelInfo.Section.SectionName, (App.CurrentLevelInfo.LevelIndex + 1).ToString]);
     DrawMessage(Txt);
     Exit(True);
   end
   else
-    DrawMessage(SIncorrectCode);
-
+    DrawMessage(gt.SLevelCodeScreen_IncorrectCode);
 end;
 
 procedure TGameScreenLevelCode.DrawChar(aCursorPos: Integer; aBlink: Boolean);
@@ -173,17 +167,17 @@ begin
     C := '_'
   else
     C := LevelCode[CursorPosition];
-  DrawPurpleText(ScreenImg.Bitmap, C, XPos + CursorPosition * 16 - 16, YPositions[1], BackBuffer);
+  DrawPurpleText(ScreenImg.Bitmap, C, XPos + CursorPosition * 16 - 16, YPositions[1], TFontRecolor.Purple, BackBuffer);
 end;
 
 procedure TGameScreenLevelCode.DrawMessage(const S: string);
 begin
-  if LastMessage <> '' then
+  if not LastMessage.IsEmpty then
     DrawPurpleTextCentered(ScreenImg.Bitmap, LastMessage, YPositions[2], BackBuffer, True);
 
   LastMessage := S;
 
-  if S = '' then
+  if S.IsEmpty then
     Exit;
 
   DrawPurpleTextCentered(ScreenImg.Bitmap, S, YPositions[2]);
@@ -191,14 +185,14 @@ end;
 
 procedure TGameScreenLevelCode.UpdateCheatMessage;
 begin
-  Assert(App <> nil);
+  {$ifdef paranoid} Assert(App <> nil); {$endif}
 
-  if LastCheatMessage <> '' then
+  if not LastCheatMessage.IsEmpty then
     DrawPurpleTextCentered(ScreenImg.Bitmap, LastCheatMessage, 350- 20, BackBuffer, True);
 
-  LastCheatMessage := '';
+  LastCheatMessage := string.Empty;
 
-  if not App.Config.UseCheatCodes then
+  if not App.Config.MiscOptions.CheatCodesInLevelCodeScreen then
     Exit;
 
   LastCheatMessage := 'Cheatcodes Enabled!';
@@ -240,10 +234,9 @@ begin
           if CheckCheatCode then
           begin
             // toggle cheat enabled
-            App.Config.UseCheatCodes := True;//not App.UseCheatCodes;
-            App.Config.UseCheatScrollingInPreviewScreen := True;//not App.UseCheatScrollingInPreviewScreen;
+            App.Config.MiscOptions.CheatCodesInLevelCodeScreen := True;
+            //App.Config.MiscOptions.UseCheatScrollingInPreviewScreen := True;
             UpdateCheatMessage;
-            //DrawMessage('cheatmode enabled');
             Exit;
           end;
 
@@ -298,7 +291,7 @@ begin
         end;
       'A'..'Z', '0'..'9':
         begin
-          DrawMessage('');
+          DrawMessage(string.Empty);
           OldC := LevelCode[CursorPosition];
           OldPos := CursorPosition;
           LevelCode[CursorPosition] := C;
@@ -320,7 +313,7 @@ begin
         end;
       Chr(8):
         begin
-          DrawMessage('');
+          DrawMessage(string.Empty);
           // GoBack := True;
           if CursorPosition > 1 then
           begin

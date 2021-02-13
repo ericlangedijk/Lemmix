@@ -12,9 +12,9 @@ uses
 vcl.dialogs,
 
   System.Classes, System.SysUtils, System.IOUtils, System.Generics.Collections, System.Character,
-  Base.Utils,
+  Base.Utils, Base.Types,
   Dos.Consts, Dos.Compression, Dos.Structures,
-  Prog.Types, Prog.Base,
+  Prog.Base,
   Styles.Base;
 
 type
@@ -193,13 +193,10 @@ const method = 'DoInitializeLevelSystem'; // system
   • an eventual existing oddtable.dat is ignored
 -------------------------------------------------------------------------------}
 
-//todo: ignore duplicate levels
-
 const
   sectionNames: array[0..3] of string = ('Fun', 'Tricky', 'Taxing', 'Mayhem'); // we use the original sectionnames
 
     function FindDigit(const aFilename: string; out filenameOnly: string): Integer;
-    // todo: maybe check there is only one digit
     begin
       filenameOnly := ExtractFileName(aFileName);
       for var C: Char in filenameOnly do
@@ -244,7 +241,7 @@ begin
   foundGraphicIndices := [];
 
   path := Style.RootPath;
-  musicpath := Consts.PathToMusics[style.Name];// path + 'Music\';
+  musicpath := Consts.PathToMusics[style.Name];
   templevelList := TFastObjectList<TAnalyzedEntry>.Create;
   tempDictionary := TDictionary<TEntry, Boolean>.Create;
   leveldatDictionary := TDictionary<string, Integer>.Create;
@@ -410,9 +407,9 @@ const unknown = '$unknown';
 const method = 'GetFileNamesForGraphicSet';
 // we use our internal dictionaries for this if files are not mapped
 begin
-  aGraphicsFileName := '';
-  aMetaDataFileName := '';
-  aSpecialGraphicsFileName := '';
+  aGraphicsFileName := string.Empty;
+  aMetaDataFileName := string.Empty;
+  aSpecialGraphicsFileName := string.Empty;
 
   inherited GetFileNamesForGraphicSet(aGraphicSetId, aGraphicSetIdExt, aMetaDataFileName, aGraphicsFileName, aSpecialGraphicsFileName);
 
@@ -425,7 +422,6 @@ begin
 
   if (aGraphicSetIdExt > 0) and (TUserStyle(Style).LevelSpecialGraphicsMapping = TLevelSpecialGraphicsMapping.Default) then
     aSpecialGraphicsFileName := 'vgaspec' + Pred(aGraphicSetIdExt).ToString + '.dat' // 1 maps to 0 for filename
-
 end;
 
 { TLemminiLevelSystem }

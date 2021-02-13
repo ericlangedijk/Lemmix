@@ -6,12 +6,16 @@ interface
 
 uses
   Winapi.Windows,
-  System.Types, System.Classes, System.SysUtils, System.Generics.Collections, System.Math,
+  System.Types, System.Classes, System.SysUtils, System.Generics.Collections, System.Math, System.Character,
   Vcl.Graphics, Vcl.Imaging.PngImage,
   GR32,
   Base.Utils;
 
 type
+  THSL = record
+    H, S, L: Single;
+  end;
+
   TColor32Helper = record helper for TColor32
   // speed was tested, it is as fast as working directly with TColor32Entry
   strict private
@@ -26,9 +30,10 @@ type
   public
     procedure Init(aR, aG, aB, aA: Byte); inline;
     function Average: Byte; inline;
-    //function Lightness: Single; inline;
     function AsGray: TColor32; inline;
-    //function Recolor(newColor: TColor32): TColor32;
+    function AsGraySophisticated: TColor32; inline;
+    function ToHSL: THSL; inline;
+    procedure FromHSL(const HSL: THSL); inline;
   public
     property R: Byte read GetR write SetR;
     property G: Byte read GetG write SetG;
@@ -36,20 +41,28 @@ type
     property A: Byte read GetA write SetA;
   end;
 
+  TPngMode = (
+    Opaque, // alpha = 255
+    BlackIsTransparent, // alpha = 0 when RGB = 0,0,0 otherwise alpha = 255
+    AsIs // 32 bits as is, including alpha
+  );
+
   TBitmap32Helper = class helper for TBitmap32
   public
     function GetPixelCount: Integer; inline;
-    function ToPng: TPngImage;
+    function ToPng(mode: TPngMode): TPngImage;
     function ToWic: TWicImage;
     procedure FromPng(png: TPngImage);
-    procedure SaveToPng(const aFileName: string);
+    procedure SaveToPng(const aFileName: string; mode: TPngMode);
   // some manipulations
     procedure ReplaceColor(FromColor, ToColor: TColor32);
     procedure ReplaceAllNonZeroColors(ToColor: TColor32);
     procedure ReplaceAlphaForAllNonZeroColors(alpha: Byte);
-    procedure MakeGray;
-    //procedure Recolor(newColor: TColor32);
+    procedure ReplaceAlphaForNonZeroAndZeroColors;
+    procedure MakeGray(sophisticated: Boolean);
     function CalcFrameRect(aFrameCount, aFrameIndex: Integer): TRect;
+    function ToMaskText: string;
+    function GetUpdateCount: Integer; inline;
   end;
 
   // special class for irregular chars (sizes are not equal)
@@ -58,8 +71,12 @@ type
     fFrameList: TList<TRect>;
     fCharList: TList<Char>;
     fTempList: TBitmaps;
+    fMaxHeight: Integer;
+    fAvgWidth: Integer;
+    fAvgHeight: Integer;
     fLock: LONGBOOL;
     procedure CreateCompleteBitmap;
+    class function GetFilledRect(bmp: TBitmap32): TRect;
   public
     constructor Create; override;
     destructor Destroy; override;
@@ -67,9 +84,14 @@ type
     procedure FontEndCreate;
     procedure AddChar(C: Char; src: TBitmap32);
     function GetCharRect(C: Char): TRect;
-    function DrawChar(C: Char; dst: TBitmap32; x, y: Integer): TSize;
+    function GetCharSize(C: Char): TSize;
+    function DrawChar(C: Char; dst: TBitmap32; x, y: Integer): TSize; overload;
+    function DrawChar(C: Char; dst: TCanvas; x, y: Integer; aScale: Single): TSize; overload;
     function TextSize(const s: string): TSize;
     function DrawText(const s: string; dst: TBitmap32; x, y: Integer): TSize;
+    property AvgHeight: Integer read fAvgHeight;
+    property AvgWidth: Integer read fAvgWidth;
+    property MaxHeight: Integer read fMaxHeight;
   end;
 
 procedure MakeImageGrayscale(Image: TPngImage; Amount: Byte = 255);
@@ -145,55 +167,29 @@ var
   avg: Byte;
 begin
   avg := Average;
-  Result.R := avg;
-  Result.G := avg;
-  Result.B := avg;
-  Result.A := Self.A;
+  Result.Init(avg, avg, avg, A);
 end;
 
-(*
-function TColor32Helper.Recolor(newColor: TColor32): TColor32;
-// r = 0.21   g = 0.72   b = 0.07
-//var
-//  avg: Byte;
-//  h,s,l: byte;
-//  h2,s2,l2: byte;
+function TColor32Helper.AsGraySophisticated: TColor32;
+// using formula Gray = Green * 0.59 + Blue * 0.30 + Red * 0.11;
+var
+  avg: Integer;
 begin
-  Result := 0;
-//  Result := newColor;//Self;
-//  Result.A := 0;
-//  if Result = 0 then
-//    Exit;
-//  avg := Average;
-//
-////  var a: single := self.Lightness;
-////  if a = 0 then exit;
-////  var b: single := newcolor.Lightness;
-//
-//
-//  RGBtoHSL(Self, H, S, L);
-//  RGBtoHSL(Result, H2, S2, L2);
-//  Result := HSLtoRGB(H2, s, l, 0);
-
-//  Result.R := Round(newColor.R * b/a * 0.21);
-//  Result.G := Round(newColor.G * b/a * 0.72);
-//  Result.B := Round(newColor.B * b/a * 0.07);
-
-
-  //  Result.R := (Integer(newColor.R) * 255) div avg;
-//  Result.G := (Integer(newColor.G) * 255) div avg;
-//  Result.G := (Integer(newColor.B) * 255) div avg;
-//  myLightness := Lightness;
-////  redLightness := 0.21 * R;
-////  Result.R := Round(newColor.R * myLightness * (1/0.21));
-////  Result.G := Round(newColor.G * myLightness * (1/0.72));
-////  Result.B := Round(newColor.B * myLightness * (1/0.07));
-//  Result.R := Round(newColor.R * myLightness * (1/0.21));
-//  Result.G := Round(newColor.G * myLightness * (1/0.72));
-//  Result.B := Round(newColor.B * myLightness * (1/0.07));
-//  Result.A := A;
+  avg := Min(Round(R * 0.11) + Round(G * 0.58) + Round(B * 0.30), 255);
+  Result.Init(avg, avg, avg, A);
 end;
-*)
+
+function TColor32Helper.ToHSL: THSL;
+// get HSL from this color
+begin
+  RGBtoHSL(Self, Result.H, Result.S, Result.L);
+end;
+
+procedure TColor32Helper.FromHSL(const HSL: THSL);
+// change color from HSL
+begin
+  Self := HSLtoRGB(HSL.H, HSL.S, HSL.L);
+end;
 
 { TBitmap32Helper }
 
@@ -232,6 +228,24 @@ begin
   end;
 end;
 
+procedure TBitmap32Helper.ReplaceAlphaForNonZeroAndZeroColors;
+// color = opaque, black = transparent
+var
+  P: PColor32;
+  i: Integer;
+begin
+  if Width + Height = 0 then
+    Exit;
+  P := PixelPtr[0, 0];
+  for i := 0 to Height * Width - 1 do begin
+    if P^ and $FFFFFF00 = 0 then
+      P^.A := 0
+    else
+      P^.A := 255;
+    Inc(P);
+  end;
+end;
+
 function TBitmap32Helper.CalcFrameRect(aFrameCount, aFrameIndex: Integer): TRect;
 var
   Y, H: Integer;
@@ -256,7 +270,7 @@ begin
   end;
 end;
 
-procedure TBitmap32Helper.MakeGray;
+procedure TBitmap32Helper.MakeGray(sophisticated: Boolean);
 var
   P: PColor32;
   i: Integer;
@@ -264,40 +278,61 @@ begin
   if Width + Height = 0 then
     Exit;
   P := PixelPtr[0, 0];
-  for i := 0 to Height * Width - 1 do begin
-    P^ := P^.AsGray;
-    Inc(P);
+  if not sophisticated then begin
+    for i := 0 to Height * Width - 1 do begin
+      P^ := P^.AsGray;
+      Inc(P);
+    end
+  end
+  else begin
+    for i := 0 to Height * Width - 1 do begin
+      P^ := P^.AsGraySophisticated;
+      Inc(P);
+    end
   end;
 end;
 
-(*
-procedure TBitmap32Helper.Recolor(newColor: TColor32);
-//var
-//  P: PColor32;  // Result := (0.21 * R) + (0.72 * G) + (0.07 * B);
-//   i: Integer;
-//  avg: Byte;
-begin
-//  if Width + Height = 0 then
-//    Exit;
-//  P := PixelPtr[0, 0];
-//  for i := 0 to Height * Width - 1 do begin
-//    P^ := P^.Recolor(newColor);
-//    Inc(P);
-//  end;
-end;
-*)
+function TBitmap32Helper.ToPng(mode: TPngMode): TPngImage;
+type
+  TRGB = packed record
+    B,G,R: Byte;
+  end;
+  PRGB = ^TRGB;
 
-function TBitmap32Helper.ToPng: TPngImage;
 var
-  b: TBitmap;
+  line: Pointer;
+  alphaline: Pointer;
+  rgbptr: PRGB;
+  alphaptr: PByte;
+  pix: PColor32;
 begin
-  b := TBitmap.Create;
-  Result := TPngImage.Create;
-  try
-    b.Assign(Self);
-    Result.Assign(b);
-  finally
-    b.Free;
+  Result := TPngImage.CreateBlank(COLOR_RGBALPHA, 8, Width, Height);
+
+  if Width + Height <= 0 then
+    Exit;
+
+  pix := PixelPtr[0, 0];
+  for var y: Integer := 0 to Height - 1 do begin
+    line := Result.Scanline[y];
+    rgbptr := line;
+    alphaline := Result.AlphaScanline[y];
+    alphaptr := alphaline;
+
+    for var x := 0 to Width - 1 do begin
+      rgbptr^.R := TColor32Entry(pix^).R;
+      rgbptr^.G := TColor32Entry(pix^).G;
+      rgbptr^.B := TColor32Entry(pix^).B;
+
+      case mode of
+        TPngMode.Opaque: alphaptr^ := 255;
+        TPngMode.BlackIsTransparent: if pix^ and $FFFFFF00 = 0 then alphaptr^ := 0 else alphaptr^ := 255;
+        TPngMode.AsIs: alphaptr^ := TColor32Entry(pix^).A;
+      end;
+
+      Inc(rgbptr);
+      Inc(alphaptr);
+      inc(pix);
+    end;
   end;
 end;
 
@@ -328,17 +363,48 @@ begin
   end;
 end;
 
-procedure TBitmap32Helper.SaveToPng(const aFileName: string);
+procedure TBitmap32Helper.SaveToPng(const aFileName: string; mode: TPngMode);
 var
   png: TPngImage;
 begin
   png := nil;
   try
-    png := ToPng;
+    png := ToPng(mode);
     png.SaveToFile(aFileName);
   finally
     png.Free;
   end;
+end;
+
+function TBitmap32Helper.ToMaskText: string;
+// a little mask routine for debugging purposes
+var
+  mask: Cardinal;
+  comment: string;
+begin
+  Result := string.Empty;
+
+  for var y := 0 to Height - 1 do begin
+    Mask := 0;
+    comment := ' // ';
+    for var x := 0 to Width - 1 do begin
+
+      if PixelS[x,y] <> 0 then
+        mask := mask or (1 shl x);
+
+      if PixelS[x,y] = 0 then
+        comment := comment + '0'
+      else
+        comment := comment + '1';
+    end;
+    Result := Result + '$' + IntToHex(mask) + ',' + comment;
+    Result := Result + CRLF;
+  end;
+end;
+
+function TBitmap32Helper.GetUpdateCount: Integer;
+begin
+  Result := UpdateCount;
 end;
 
 { TBitmapFont }
@@ -357,6 +423,81 @@ begin
   if Assigned(fTempList) then
     fTempList.Free;
   inherited;
+end;
+
+class function TBitmapFont.GetFilledRect(bmp: TBitmap32): TRect;
+var
+  c: TColor32;
+  x, y: Integer;
+  lineempty: Boolean;
+  xLeft, xRight, yTop, yBottom: Integer;
+begin
+  if (bmp.Width = 0) or (bmp.Height = 0) then
+    Exit(TRect.Empty);
+  c := Bmp.PixelS[0, bmp.Height - 1];
+
+  xLeft := 0;
+  yTop := 0;
+  xRight := bmp.Width - 1;
+  yBottom := bmp.Height - 1;
+
+  // top
+  for y := 0 to bmp.Height - 1 do begin
+    yTop := y;
+    lineEmpty := True;
+    for x := 0 to bmp.Width - 1 do begin
+      if bmp.Pixel[x, y] <> c then begin
+        lineEmpty := False;
+        Break;
+      end;
+    end;
+    if not lineEmpty then
+      Break;
+  end;
+
+  // bottom
+  for y := bmp.Height - 1 downto 0 do begin
+    yBottom := y;
+    lineEmpty := True;
+    for x := 0 to bmp.Width - 1 do begin
+      if bmp.Pixel[x, y] <> c then begin
+        lineEmpty := False;
+        Break;
+      end;
+    end;
+    if not lineEmpty then
+      Break;
+  end;
+
+  // left
+  for x := 0 to bmp.Width - 1 do begin
+    xLeft := x;
+    lineEmpty := True;
+    for y := 0 to bmp.Height - 1 do begin
+      if bmp.Pixel[x, y] <> c then begin
+        lineEmpty := False;
+        Break;
+      end;
+    end;
+    if not lineEmpty then
+      Break;
+  end;
+
+  // right
+  for x := bmp.Width - 1 downto 0 do begin
+    xRight := x;
+    lineEmpty := True;
+    for y := 0 to bmp.Height - 1 do begin
+      if bmp.Pixel[x, y] <> c then begin
+        lineEmpty := False;
+        Break;
+      end;
+    end;
+    if not lineEmpty then
+      Break;
+  end;
+
+  Result := Rect(xLeft, yTop, xRight + 1, yBottom + 1);
 end;
 
 procedure TBitmapFont.FontBeginCreate;
@@ -380,8 +521,14 @@ procedure TBitmapFont.CreateCompleteBitmap;
 var
   x, y: Integer;
 begin
+  {$ifdef paranoid}
   Assert(fTempList.Count = fFrameList.Count);
   Assert(fCharList.Count = fFrameList.Count);
+  {$endif}
+
+  fAvgWidth := 0;
+  fAvgHeight := 0;
+  fMaxHeight := 0;
 
   var neededWidth: Integer := 0;
   for var r: TRect in fFrameList do begin
@@ -394,32 +541,62 @@ begin
     x := fFrameList[ix].Left;
     y := fFrameList[ix].Top;
     fTempList[ix].DrawTo(Self, x, y);
+    fMaxHeight := Max(fMaxHeight, fFrameList[ix].Height);
+    Inc(fAvgWidth, fFrameList[ix].Width);
+    Inc(fAvgHeight, fFrameList[ix].Height);
   end;
+
+  fAvgWidth := Round(fAvgWidth / fCharList.Count);
+  fAvgHeight := Round(fAvgHeight / fCharList.Count);
 end;
 
 procedure TBitmapFont.AddChar(C: Char; src: TBitmap32);
 var
   inf: TRect;
   tmp: TBitmap32;
+  r: TRect;
 begin
   if not fLock then
     Throw('Bitmapfont must be locked', 'AddChar');
+
+  r := GetFilledRect(src);
+
+//  if fFrameList.Count = 0 then begin
+//    inf.Left := 0;
+//    inf.Top := 0;
+//    inf.Right := src.Width;
+//    inf.Bottom := src.Height;
+//  end
+//  else begin
+//    inf.Left := 0;
+//    inf.Top := fFrameList.Last.Bottom;
+//    inf.Right := src.Width;
+//    inf.Bottom := inf.Top + src.Height;
+//  end;
+
   if fFrameList.Count = 0 then begin
     inf.Left := 0;
     inf.Top := 0;
-    inf.Right := src.Width;
-    inf.Bottom := src.Height;
+    inf.Right := r.Width;
+    inf.Bottom := r.Height;
   end
   else begin
     inf.Left := 0;
     inf.Top := fFrameList.Last.Bottom;
-    inf.Right := src.Width;
-    inf.Bottom := inf.Top + src.Height;
+    inf.Right := r.Width;
+    inf.Bottom := inf.Top + r.Height;
   end;
+
   fCharList.Add(C);
   fFrameList.Add(inf);
   tmp := TBitmap32.Create;
-  tmp.Assign(src);
+
+  tmp.SetSize(r.Width, r.Height);
+  src.DrawTo(tmp, 0, 0, r);
+
+//  tmp.Assign(src);
+
+
   fTempList.Add(tmp);
 end;
 
@@ -434,6 +611,12 @@ begin
   Result := TRect.Empty;
 end;
 
+function TBitmapFont.GetCharSize(C: Char): TSize;
+begin
+  var r: TRect := GetCharRect(c);
+  Result.Create(r.Width, r.Height);
+end;
+
 function TBitmapFont.DrawChar(C: Char; dst: TBitmap32; x, y: Integer): TSize;
 begin
   var R: TRect := GetCharRect(C);
@@ -445,6 +628,30 @@ begin
     Self.DrawTo(dst, x, y);
     Result.cx := R.Width;
     Result.cy := R.Height;
+  end;
+end;
+
+function TBitmapFont.DrawChar(C: Char; dst: TCanvas; x, y: Integer; aScale: Single): TSize;
+var
+  dstRect: TRect;
+begin
+  var R: TRect := GetCharRect(C);
+  if R.IsEmpty then begin
+    Result.cx := 0;
+    Result.cy := 0;
+  end
+  else begin
+    dstRect.Create(x, y, x + R.Width, y + R.Height);
+
+//    dstRect.Offset(0, MaxHeight - R.Height); // todo: check
+
+    if aScale <> 1.0 then begin
+      dstRect.Width := Round(dstRect.Width * aScale);
+      dstRect.Height := Round(dstRect.Height * aScale);
+    end;
+    Self.DrawTo(dst.Handle, dstRect, R);
+    Result.cx := dstRect.Width;
+    Result.cy := dstRect.Height;
   end;
 end;
 
@@ -470,14 +677,14 @@ begin
   DstRect := Rect(X, Y, X, Y);
   for C in s do begin
     SrcRect := GetCharRect(C);
+
     DstRect.Width := SrcRect.Width;
     DstRect.Height := SrcRect.Height;
+
     Self.DrawTo(Dst, DstRect, SrcRect);
     Inc(DstRect.Left, SrcRect.Width);
   end;
-
 end;
-
 
 procedure MakeImageGrayscale(Image: TPngImage; Amount: Byte = 255);
 // not used in lemmix

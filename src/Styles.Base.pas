@@ -9,11 +9,11 @@ interface
 uses
   System.Classes, System.SysUtils, System.Contnrs, System.Generics.Collections, System.Character,
   GR32,
-  Base.Utils, Base.Bitmaps,
+  Base.Utils, Base.Types, Base.Bitmaps,
   Dos.Consts, Dos.Compression, Dos.Bitmaps, Dos.Structures,
   Meta.Structures,
   Level.Base, Level.Hash, Level.Loader,
-  Prog.Types, Prog.Base, Prog.Data;
+  Prog.Base, Prog.Data;
 
 type
   TStyle = class;
@@ -222,6 +222,7 @@ type
     function LastLevel: TLevelLoadingInformation; inline;
     function FindLevelByIndex(const aSectionIndex, aLevelIndex: Integer): TLevelLoadingInformation;
     function FindLevelBySectionNameAndNumber(const aCode: string): TLevelLoadingInformation;
+    function FindLevelByHash(const aHash: UInt64): TLevelLoadingInformation;
     function SelectRandomLevel: TLevelLoadingInformation;
   // properties
     property OddTableFileName: string read fOddTableFileName;
@@ -283,6 +284,7 @@ type
     function GetRawLVL: TLVLRec;
     function GetRawLVLTitle: TLVLTitle;
     function GetLevelTitle(trimmed: Boolean = True): string;
+//    function GenFileNameWithoutExtension: string;
   // properties
     property Style: TStyle read GetStyle;
     property LevelSystem: TLevelSystem read GetLevelSystem;
@@ -309,7 +311,21 @@ type
     class procedure LoadLVL(aInfo: TLevelLoadingInformation; var LVL: TLVLRec); static;
   end;
 
+function GenFilenameWithoutExtension(const aStylename: string; aSectionIndex, aLevelIndex: Integer; const title: TLVLTitle): string; overload;
+function GenFilenameWithoutExtension(info: TLevelLoadingInformation): string; overload; inline;
+
 implementation
+
+function GenFilenameWithoutExtension(const aStylename: string; aSectionIndex, aLevelIndex: Integer; const title: TLVLTitle): string;
+begin
+  Result := aStylename + '.' + Succ(aSectionIndex).ToString + '.' + Succ(aLevelIndex).ToString.PadLeft(3, '0') + '.' + LVLTitleAsString(title, True);
+  Result := StripInvalidFileChars(Result, False, True, True);
+end;
+
+function GenFilenameWithoutExtension(info: TLevelLoadingInformation): string; overload; inline;
+begin
+  Result := GenFilenameWithoutExtension(info.Style.Name, info.SectionIndex, info.LevelIndex, info.GetRawLVLTitle);
+end;
 
 { TStyle }
 
@@ -464,7 +480,7 @@ begin
   fLemmingBitmaps.Clear;
   fExtraBitmaps.Clear;
   // fried and or vaporizing have high color indices
-  Assert(Length(AnimationPalette) >= 16);
+  {$ifdef paranoid} Assert(Length(AnimationPalette) >= 16); {$endif}
   Pal := Copy(fAnimationPalette);
 
   Fn := Style.MainDatFileName;
@@ -565,9 +581,9 @@ begin
   SetLength(fPalettePreview, 0);
   SetLength(fPalette, 0);
   fBrickColor := 0;
-  fMetaDataFile := '';
-  fGraphicFile := '';
-  fGraphicExtFile := '';
+  fMetaDataFile := string.Empty;
+  fGraphicFile := string.Empty;
+  fGraphicExtFile := string.Empty;
 end;
 
 procedure TGraphicSet.LoadMetaData;
@@ -776,7 +792,7 @@ class procedure TLevelSystem.GetDefaultNamesForGraphics(aGraphicSetId, aGraphicS
 begin
   aMetaDataFileName := 'ground' + aGraphicSetId.ToString + 'o.dat';
   aGraphicsFileName := 'vgagr' + aGraphicSetId.ToString + '.dat';
-  aSpecialGraphicsFileName := '';
+  aSpecialGraphicsFileName := string.Empty;
   if aGraphicSetIdExt > 0 then
     aSpecialGraphicsFileName := 'vgaspec' + pred(aGraphicSetIdExt).ToString + '.dat' // 1 maps to 0 for filename
 end;
@@ -863,8 +879,8 @@ begin
   if Length(aCode) < 2 then
     Exit;
 
-  sectionstring := '';
-  levelstring := '';
+  sectionstring := string.Empty;
+  levelstring := string.Empty;
   for var C: Char in aCode do
     if C.IsLetter then begin
       if digitsFound then
@@ -897,6 +913,16 @@ begin
   Dec(ix);
 
   Result := foundSection.LevelLoadingInformationList[ix];
+end;
+
+function TLevelSystem.FindLevelByHash(const aHash: UInt64): TLevelLoadingInformation;
+begin
+  for var section: TSection in fSectionList do
+    for var info: TLevelLoadingInformation in section.fLevelLoadingInformationList do begin
+      if info.GetLevelHash = aHash then
+        Exit(info);
+    end;
+  Result := nil;
 end;
 
 function TLevelSystem.SelectRandomLevel: TLevelLoadingInformation;
@@ -942,6 +968,7 @@ begin
       aLevelInfo.fPrev := thePrev;
     end;
   end;
+
 end;
 
 function TSection.GetStyle: TStyle;
@@ -977,6 +1004,41 @@ begin
   else
     fMusicStreamType := TMusicStreamType.None;
 end;
+
+//function TLevelLoadingInformation.GenFileNameWithoutExtension(includeStyle: Boolean = True; includeSection: Boolean = True; includeLevelIndex: Boolean = True): string;
+//
+//  procedure AddDot;
+//  begin
+//    if Result <> string.Empty then
+//      Result := Result + '.';
+//  end;
+//
+//var
+//  title: string;
+//
+//begin
+//  Result := string.Empty;
+//  if includeStyle then
+//    Result := Result + Style.Name;
+//
+//  if includeSection then begin
+//    AddDot;
+//    Result := Result + Section.SectionName;
+//  end;
+//
+//  if includeLevelIndex then begin
+//    AddDot;
+//    Result := Result + Succ(LevelIndex).ToString.PadLeft(3, '0');
+//  end;
+//
+//  AddDot;
+//  title := GetLevelTitle(true);
+//  if title.IsEmpty then
+//    title := 'noname';
+//  result := Result + title;
+//
+//  Result := StripInvalidFileChars(Result, False, False, True);
+//end;
 
 function TLevelLoadingInformation.GetIsCached: Boolean;
 begin

@@ -8,11 +8,13 @@ uses
   Winapi.Windows,
   System.Classes, System.SysUtils, System.Contnrs, System.Zip, System.Generics.Collections,
   Vcl.Graphics, Vcl.Imaging.PngImage,
-  Base.Utils,
-  Prog.Types, Prog.Base;
+  GR32,
+  Base.Utils, Base.Types,
+  Prog.Base;
 
 type
   TDataType = (
+    Asset,                 // some assets
     Cursor,                // game cursor
     Sound,                 // game sound
     Particles,             // exploding particles
@@ -20,8 +22,9 @@ type
     LevelGraphics,         // specific graphics data or vgaspecdata or metadata binding levelgraphics style dependant
     LevelSpecialGraphics,  // special graphics (vgaspec)
     Level,                 // LVL only, style dependant
-    Music                  // game music, style dependant
-  );
+    Music,                 // game music, style dependant
+    Language
+ );
 
 type
   // quite a complicated bussiness
@@ -34,28 +37,31 @@ type
     class var fTotalCacheSize: Integer;
     class var fCache: TObjectDictionary<string, TBytesStream>;
   public
-    class procedure Init; static; // must be called at startup
-    class procedure Done; static;
+    class constructor Create;
+    class destructor Destroy;
 
     class function CreateDataStream(const aStyleName, aFileName: string; aType: TDataType; preventCaching: Boolean = False; disk: Boolean = False): TBytesStream; static;
     class function CreatePointer(const aStyleName, aFileName: string; aType: TDataType; out aSize: Integer; preventCaching: Boolean = False; disk: Boolean = False): Pointer; static;
     class function CreateCursorBitmap(const aStyleName, aFileName: string; preventCaching: Boolean = False): TBitmap; static;
+    class function CreateAssetBitmap(const aFileName: string; preventCaching: Boolean = False): TBitmap32; static;
+    class function CreateAssetWicImage(const aFileName: string; preventCaching: Boolean = False): TWicImage; static;
+    class function CreateAssetPngImage(const aFileName: string; preventCaching: Boolean = False): TPngImage; static;
 
+    class function CreateLanguageStringList(const aFileName: string; preventCaching: Boolean = False): TStringList; static;
   end;
 
 implementation
 
 { TData }
 
-class procedure TData.Init;
+class constructor TData.Create;
 begin
   fCache := TObjectDictionary<string, TBytesStream>.Create([doOwnsValues]);
 end;
 
-class procedure TData.Done;
+class destructor TData.Destroy;
 begin
   fCache.Free;
-
   // we normally have a high hit rate, so caching is nice.
   // var s: string := fLoadRequests.ToString + ' / ' + fCacheHits.ToString;
   //MessageBox(0, PChar(s), 'requests/cachehits', 0);
@@ -68,9 +74,12 @@ class function TData.CreateDataStream(const aStyleName, aFileName: string; aType
 const
   method = 'CreateDataStream';
 var
+  forceReadFromDisk: Boolean;
+  filenameHasPath: Boolean;
   RealName: string;
   cachedStream: TBytesStream;
   mapping: Boolean;
+  mappedResnameGraphics: string;
 
     procedure LoadFromZipResource(const aResName: string);
     var
@@ -90,7 +99,7 @@ var
           str.Position := 0;
           zip.Open(str, TZipMode.zmRead);
           if zip.IndexOf(internalname) < 0 then
-            Throw('File not found in zip-resource: ' + internalname, method + 'LoadFromZipResource');
+            Throw('File not found in zip-resource: ' + internalname, method + '.LoadFromZipResource');
           zip.Read(internalname, bytes);
           // the stream copies the bytes
           Result := TBytesStream.Create(bytes); // 'global' result
@@ -127,24 +136,44 @@ var
 begin
   Result := nil;
 
-  //todo: make a little bit more readable
   mapping := False;
+  mappedResnameGraphics := string.Empty;
 
-  var forceReadFromDisk: Boolean :=
+  forceReadFromDisk :=
     disk
-    or ((Consts.StyleDef = TStyleDef.User) and (aType in [TDataType.LemmingData, TDataType.LevelGraphics, TDataType.LevelSpecialGraphics, TDataType.Level, TDataType.Music]));
+    or ((Consts.StyleDef = TStyleDef.User) and (aType in [TDataType.LemmingData, TDataType.LevelGraphics, TDataType.LevelSpecialGraphics, TDataType.Level, TDataType.Music]))
+    or (aType = TDataType.Language);
 
-  var info: Consts.TStyleInformation := Consts.FindStyleInfo(aStyleName);
+  if forceReadFromDisk then
+    filenameHasPath := not ExtractFilePath(aFilename).IsEmpty
+  else
+    filenameHasPath := False;
 
-  if (info.UserGraphicsMapping = TLevelGraphicsMapping.Concat) and (aType in [TDataType.LemmingData, TDataType.LevelGraphics]) then begin
-    mapping := True;
+  if not aStyleName.IsEmpty then begin
+
+    var info: Consts.TStyleInformation := Consts.FindStyleInfo(aStyleName);
+    if not Assigned(info) then
+      Throw('Style not found ' + aStylename, method);
+
+    if (info.UserGraphicsMapping in [TLevelGraphicsMapping.Concat, TLevelGraphicsMapping.Ohno]) and (aType in [TDataType.LemmingData, TDataType.LevelGraphics]) then begin
+      mapping := True;
+      case info.UserGraphicsMapping of
+        TLevelGraphicsMapping.Default :  mappedResnameGraphics := 'CUSTOM';
+        TLevelGraphicsMapping.Orig    :  mappedResnameGraphics := 'ORIG';
+        TLevelGraphicsMapping.Ohno    :  mappedResnameGraphics := 'OHNO';
+        TLevelGraphicsMapping.Concat  : mappedResnameGraphics := 'CUSTOM';
+      end;
+    end;
+
+    if (info.UserSpecialGraphicsMapping = TLevelSpecialGraphicsMapping.Orig) and (aType = TDataType.LevelSpecialGraphics) then begin
+      mapping := True;
+    end;
+
   end;
 
-  if (info.UserSpecialGraphicsMapping = TLevelSpecialGraphicsMapping.Orig) and (aType = TDataType.LevelSpecialGraphics) then begin
-    mapping := True;
-  end;
-
+  RealName := aFilename;
   case aType of
+    TDataType.Asset                 : RealName := Consts.PathToAssets + ExtractFileName(aFileName);
     TDataType.Cursor                : RealName := Consts.PathToCursors + ExtractFileName(aFileName);
     TDataType.LemmingData           : RealName := Consts.PathToLemmings[aStylename] + ExtractFileName(aFileName);
     TDataType.LevelGraphics         : RealName := Consts.PathToLemmings[aStylename] + ExtractFileName(aFileName);
@@ -153,6 +182,7 @@ begin
     TDataType.Sound                 : RealName := Consts.PathToSounds + ExtractFileName(aFileName);
     TDataType.Music                 : RealName := Consts.PathToMusics[aStylename] + ExtractFileName(aFileName);
     TDataType.Particles             : RealName := Consts.PathToParticles + ExtractFileName(aFileName);
+    TDataType.Language              : if not filenameHasPath then RealName := Consts.PathToLanguage + ExtractFileName(aFileName);
   else
     Throw('Unhandled resource data type (' + aFileName + ')', 'CreateData');
   end;
@@ -167,6 +197,10 @@ begin
   end;
 
   case aType of
+    TDataType.Asset:
+        if not forceReadFromDisk
+        then LoadFromZipResource(Consts.ResNameAssets)
+        else LoadFromDisk;
     TDataType.Cursor:
         if not forceReadFromDisk
         then LoadFromZipResource(Consts.ResNameZippedCursors)
@@ -177,7 +211,7 @@ begin
         then LoadFromZipResource(Consts.ResourceNameZippedLemmings[aStylename])
         else LoadFromDisk;
     TDataType.LevelGraphics:
-        if mapping then LoadFromZipResource(Consts.ResNameCustom)
+        if mapping then LoadFromZipResource(mappedResnameGraphics)
         else if not forceReadFromDisk
         then LoadFromZipResource(Consts.ResourceNameZippedLemmings[aStylename])
         else LoadFromDisk;
@@ -207,6 +241,11 @@ begin
         if not forceReadFromDisk
         then LoadFromNormalResource(Consts.ResNameParticles)
         else LoadFromDisk;
+      end;
+    TDataType.Language:
+      begin
+        if forceReadFromDisk then
+          LoadFromDisk; // never resourced
       end;
   end;
 
@@ -252,6 +291,79 @@ begin
   try
     stream := CreateDataStream(aStyleName, aFileName, TDataType.Cursor, preventCaching);
     Result := TBitmap.Create;
+    try
+      Result.LoadFromStream(stream);
+    except
+      FreeAndNil(Result);
+      raise;
+    end;
+  finally
+    stream.Free;
+  end;
+end;
+
+class function TData.CreateAssetBitmap(const aFileName: string; preventCaching: Boolean): TBitmap32;
+begin
+  Result := nil;
+  var stream : TBytesStream := nil;
+  try
+    stream := CreateDataStream(string.Empty, aFileName, TDataType.Asset, preventCaching);
+    Result := TBitmap32.Create;
+    try
+      Result.LoadFromStream(stream);
+    except
+      FreeAndNil(Result);
+      raise;
+    end;
+  finally
+    stream.Free;
+  end;
+end;
+
+class function TData.CreateAssetWicImage(const aFileName: string; preventCaching: Boolean): TWicImage;
+begin
+  Result := nil;
+  var stream : TBytesStream := nil;
+  try
+    stream := CreateDataStream(string.Empty, aFileName, TDataType.Asset, preventCaching);
+    Result := TWicImage.Create;
+    try
+      Result.LoadFromStream(stream);
+    except
+      FreeAndNil(Result);
+      raise;
+    end;
+  finally
+    stream.Free;
+  end;
+end;
+
+class function TData.CreateAssetPngImage(const aFileName: string; preventCaching: Boolean): TPngImage;
+begin
+  Result := nil;
+  var stream : TBytesStream := nil;
+  try
+    stream := CreateDataStream(string.Empty, aFileName, TDataType.Asset, preventCaching);
+    Result := TPngImage.Create;
+    try
+      Result.LoadFromStream(stream);
+    except
+      FreeAndNil(Result);
+      raise;
+    end;
+  finally
+    stream.Free;
+  end;
+end;
+
+class function TData.CreateLanguageStringList(const aFileName: string; preventCaching: Boolean = False): TStringList;
+// language is in a file and never as resource
+begin
+  Result := nil;
+  var stream : TBytesStream := nil;
+  try
+    stream := CreateDataStream(string.Empty, aFileName, TDataType.Language, preventCaching, True);
+    Result := TStringList.Create;
     try
       Result.LoadFromStream(stream);
     except

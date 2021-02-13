@@ -18,7 +18,6 @@ type
   protected
     function GetLevelSystemClass: TLevelSystemClass; override;
     function GetMechanics: TMechanics; override;
-    // todo: add GetMainDatFileName virtual
   end;
 
   TDosOrigLevelSystem = class(TLevelSystem)
@@ -125,19 +124,6 @@ type
     procedure DoInitializeLevelSystem; override;
   end;
 
-  TDosH93Style = class(TStyle)
-  protected
-    function GetLevelSystemClass: TLevelSystemClass; override;
-    function GetMechanics: TMechanics; override;
-  end;
-
-  TDosH93LevelSystem = class(TLevelSystem)
-  private
-    procedure GetEntry(aSection, aLevel: Integer; out aFileName: string; out aFileIndex: Integer; out IsOddTable: Boolean; out aOddIndex: Integer);
-  protected
-    procedure DoInitializeLevelSystem; override;
-  end;
-
   TDosH94Style = class(TStyle)
   protected
     function GetLevelSystemClass: TLevelSystemClass; override;
@@ -145,6 +131,7 @@ type
   end;
 
   TDosH94LevelSystem = class(TLevelSystem)
+  private
     procedure GetEntry(aSection, aLevel: Integer; out aFileName: string; out aFileIndex: Integer; out IsOddTable: Boolean; out aOddIndex: Integer);
   protected
     procedure DoInitializeLevelSystem; override;
@@ -275,9 +262,6 @@ procedure TDosOhNoLevelSystem.GetEntry(aSection, aLevel: Integer; out aFileName:
 var
   H, Sec, Lev: Integer;
 begin
-//  Assert((aSection >= 0) and (aSection <= 4));
-//  Assert((aLevel >= 0) and (aLevel <= 19));
-
   H := OhnoTable[aSection + 1, aLevel + 1];
   Sec := H div 10;
   Lev := H mod 10;
@@ -300,7 +284,7 @@ var
   oddIndex: Integer;
   iMusic: Integer;
 begin
-  fOddTableFileName := '';
+  fOddTableFileName := string.Empty;
   iMusic := 1;
   for var iSection := 0 to 4 do begin
     section := TSection.Create(Self);
@@ -314,95 +298,6 @@ begin
       level.OddTableIndex := oddIndex;
       // tracks 01..06
       level.MusicFileName := 'Track_' + LeadZeroStr(iMusic, 2) + '.mod';
-      Inc(iMusic);
-      if iMusic > 6 then
-        iMusic := 1;
-    end;
-  end;
-end;
-
-{ TDosH93Style }
-
-function TDosH93Style.GetLevelSystemClass: TLevelSystemClass;
-begin
-  Result := TDosH93LevelSystem;
-end;
-
-function TDosH93Style.GetMechanics: TMechanics;
-begin
-  Result := DOSOHNO_MECHANICS;
-end;
-
-{ TDosH93LevelSystem }
-
-procedure TDosH93LevelSystem.GetEntry(aSection, aLevel: Integer; out aFileName: string; out aFileIndex: Integer; out IsOddTable: Boolean; out aOddIndex: Integer);
-// I know this can be a oneliner, but this shows better which level is where
-begin
-
-  IsOddTable := False;
-  aOddIndex := -1;
-
-  Inc(aSection);
-  Inc(aLevel);
-
-  case aSection of
-    1:
-      case aLevel of
-        1..8:
-          begin
-            aFileName := 'LEVEL000.DAT';
-            aFileIndex := aLevel - 1;
-          end;
-        9..16 :
-          begin
-            aFileName := 'LEVEL001.DAT';
-            aFileIndex := aLevel - 9;
-          end;
-      end;
-    2:
-      case aLevel of
-        1..8  :
-          begin
-            aFileName := 'LEVEL002.DAT';
-            aFileIndex := aLevel - 1;
-          end;
-        9..16 :
-          begin
-            aFileName := 'LEVEL003.DAT';
-            aFileIndex := aLevel - 9;
-          end;
-      end;
-  end;
-
-end;
-
-procedure TDosH93LevelSystem.DoInitializeLevelSystem;
-// 2 sections with each 16 levels
-const
-  sectionNames: array[0..1] of string = ('Flurry','Blitz');
-var
-  section: TSection;
-  level: TLevelLoadingInformation;
-  levelFileName: string;
-  levelFileIndex: Integer;
-  isOdd: Boolean;
-  oddIndex: Integer;
-  iMusic: Integer;
-begin
-  fOddTableFileName := '';
-  iMusic := 1;
-  for var iSection := 0 to 1 do begin
-    section := TSection.Create(Self);
-    section.SectionName := sectionNames[iSection];
-    for var iLevel: Integer := 0 to 15 do begin
-      level := TLevelLoadingInformation.Create(section);
-      GetEntry(section.SectionIndex, level.LevelIndex, {out} levelFileName, {out} levelFileIndex, {out} isOdd, {out} oddIndex);
-      level.SourceFileName := levelFileName;
-      level.SectionIndexInSourceFile := levelFileIndex;
-      level.UseOddTable := isOdd;
-      level.OddTableIndex := oddIndex;
-      // tracks 01..06
-      level.MusicFileName := '';//'Track_' + LeadZeroStr(iMusic, 2) + '.mod';
       Inc(iMusic);
       if iMusic > 6 then
         iMusic := 1;
@@ -504,7 +399,7 @@ var
   oddIndex: Integer;
   iMusic: Integer;
 begin
-  fOddTableFileName := '';
+  fOddTableFileName := string.Empty;
   iMusic := 1;
   for var iSection := 0 to 3 do begin
     section := TSection.Create(Self);
@@ -560,7 +455,7 @@ var
   oddIndex: Integer;
   iMusic: Integer;
 begin
-  fOddTableFileName := '';
+  fOddTableFileName := string.Empty;
   iMusic := 1;
   section := TSection.Create(Self);
   section.SectionName := 'XMas';
@@ -572,7 +467,7 @@ begin
     level.UseOddTable := isOdd;
     level.OddTableIndex := oddIndex;
     // not tracks yet
-    level.MusicFileName := '';
+    level.MusicFileName := string.Empty;
     Inc(iMusic);
     if iMusic > 6 then
       iMusic := 1;
@@ -613,7 +508,7 @@ var
   oddIndex: Integer;
   iMusic: Integer;
 begin
-  fOddTableFileName := '';
+  fOddTableFileName := string.Empty;
   iMusic := 1;
   section := TSection.Create(Self);
   section.SectionName := 'XMas';
@@ -625,7 +520,7 @@ begin
     level.UseOddTable := isOdd;
     level.OddTableIndex := oddIndex;
     // not tracks yet
-    level.MusicFileName := '';
+    level.MusicFileName := string.Empty;
     Inc(iMusic);
     if iMusic > 6 then
       iMusic := 1;

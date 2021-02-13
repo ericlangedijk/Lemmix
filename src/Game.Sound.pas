@@ -8,9 +8,9 @@ uses
 vcl.dialogs,
   Winapi.Windows, Winapi.MMSystem,
   System.Classes, System.Contnrs, System.SysUtils, System.Math, System.IOUtils,
-  Base.Utils,
+  Base.Utils, Base.Types,
   Dos.Consts,
-  Prog.Types, Prog.Base, Prog.Data,
+  Prog.Base, Prog.Data,
   BASS;
 
 type
@@ -29,7 +29,7 @@ type
     class procedure FreeMusicHandle(aMusic: TMusic); static;
    // play
     class procedure PlaySound(aSound: TSound); static;
-    // class procedure StopSound(aSound: TSound); static; not (yet) used so commented out interface and implementation
+    class procedure StopSound(aSound: TSound); static;
     class procedure PlayMusic(aMusic: TMusic); static;
     class procedure StopMusic(aMusic: TMusic); static;
     class procedure SetMusicVolume(aMusic: TMusic; aVolume: Single); static;
@@ -51,11 +51,13 @@ type
   TSound = class sealed(TAbstractSound)
   private
     fVolume: Single;
+    // fIsPlaying: Boolean;
     procedure SetVolume(aValue: Single);
   public
     constructor Create(const aFileName: string; const aVolume: Single = 1.0; disk: Boolean = False);
     destructor Destroy; override;
     procedure Play; inline;
+    // procedure Stop; inline;
     property Volume: Single read fVolume write SetVolume;
     property DataPtr: Pointer read fDataPtr;
     property DataSize: Integer read fDataSize;
@@ -98,6 +100,7 @@ type
     procedure ClearSounds;
     procedure PlaySound(index: Integer);
     procedure StopSound(index: Integer);
+    // procedure StopSounds;
   // musics
     function AddMusicFromFileName(const aFileName: string; aType: TMusicStreamType; aVolume: Single = 0.2): Integer;
     procedure ClearMusics;
@@ -217,15 +220,15 @@ begin
     Winapi.MMSystem.PlaySound(aSound.DataPtr, 0, SND_ASYNC or SND_MEMORY); // fallback for sounds on the winapi
 end;
 
-//class procedure SoundLibrary.StopSound(aSound: TSound);
-//begin
-//  if (aSound.DataPtr = nil) or (aSound.DataSize <= 0) then
-//    Exit;
-//  if fEnabled then
-//  	BASS_ChannelStop(aSound.Handle)
-//  else
-//    Winapi.MMSystem.PlaySound(nil, 0, 0); // fallback for sounds on the winapi
-//end;
+class procedure SoundLibrary.StopSound(aSound: TSound);
+begin
+  if (aSound.DataPtr = nil) or (aSound.DataSize <= 0) then
+    Exit;
+  if fLibEnabled then
+  	BASS_ChannelStop(aSound.Handle)
+  else
+    Winapi.MMSystem.PlaySound(nil, 0, 0); // fallback for sounds on the winapi
+end;
 
 class procedure SoundLibrary.PlayMusic(aMusic: TMusic);
 begin
@@ -276,7 +279,16 @@ end;
 procedure TSound.Play;
 begin
   SoundLibrary.PlaySound(Self);
+  //fIsPlaying := True;
 end;
+
+//procedure TSound.Stop;
+//begin
+//  if fIsPlaying then begin
+//    SoundLibrary.StopSound(Self);
+//    fIsPLaying := False;
+//  end;
+//end;
 
 procedure TSound.SetVolume(aValue: Single);
 begin
@@ -362,9 +374,15 @@ end;
 
 procedure TSoundMgr.StopSound(Index: Integer);
 begin
-  if fMusics.ValidIndex(index) then
-    SoundLibrary.StopMusic(fMusics[index]);
+  if fSounds.ValidIndex(index) then
+    SoundLibrary.StopSound(fSounds[index]);
 end;
+
+//procedure TSoundMgr.StopSounds;
+//begin
+//  for var s: TSound in fSounds do
+//    s.Stop;
+//end;
 
 procedure TSoundMgr.PlayMusic(index: Integer);
 begin
@@ -489,7 +507,7 @@ begin
   try
 
     for var snd: TSoundEffect := Succ(Low(TSoundEffect)) to High(TSoundEffect) do
-      defaultNames.Add(snd.AsFileName('').ToUpper);
+      defaultNames.Add(snd.AsFileName(string.empty).ToUpper);
     defaultNames.Sort;
     defaultNames.CaseSensitive := False;
 
@@ -499,7 +517,7 @@ begin
         function (const Path: string; const SearchRec: TSearchRec): Boolean
         begin
           var ext: string := ExtractFileExt(SearchRec.Name).ToUpper;
-          var name: string := ReplaceFileExt(ExtractFileName(SearchRec.Name), '').ToUpper;
+          var name: string := ReplaceFileExt(ExtractFileName(SearchRec.Name), string.empty).ToUpper;
           Result := (SearchRec.Size < 256 * 1024) and ((ext = '.WAV') or (ext = '.MP3')) and (defaultNames.IndexOf(name) >= 0);
         end;
       files := TDirectory.GetFiles(aPathToCustomSounds, '*.*', filter);

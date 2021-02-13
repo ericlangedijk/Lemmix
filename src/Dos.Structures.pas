@@ -112,7 +112,7 @@ const
 
 {-------------------------------------------------------------------------------
   GROUNDXX.DAT files (1056 bytes) (16 objects, 64 terrain, color palette)
-  • Somewhere there is documentation for details. todo: retrieve that.
+  • Somewhere there is documentation for details.
   • Little Endian words, so we can just load them from disk halleluyah!
 -------------------------------------------------------------------------------}
 
@@ -262,8 +262,29 @@ function DosVgaColorToColor32(const ColorRec: TDosVgaColorRec): TColor32;
 function GetDosMainMenuPaletteColors32: TArrayOfColor32;
 procedure DosVgaPalette8ToLemmixPalette(const DosPal: TDosVGAPalette8; var LemmixPal: TArrayOfColor32);
 
+function LVLTitleAsString(const title: TLVLTitle; trimmed: Boolean): string;
+function EmptyLVLTitle: TLVLTitle;
+
 
 implementation
+
+function LVLTitleAsString(const title: TLVLTitle; trimmed: Boolean): string;
+var
+  C: AnsiChar;
+begin
+  SetLength(Result, 32);
+  for var i := 0 to 31 do begin
+    C := title[i];
+    Result[i + 1] := Char(C);
+  end;
+  if trimmed then
+    Result := Result.Trim;
+end;
+
+function EmptyLVLTitle: TLVLTitle;
+begin
+  FillChar(Result, SizeOf(Result), 32); // space
+end;
 
 function GetDosMainMenuPaletteColors32: TArrayOfColor32;
 var
@@ -388,7 +409,6 @@ begin
     E^.B := (Integer(D^.B) * 255) div 63;
   end;
 end;
-
 
 end.
 
