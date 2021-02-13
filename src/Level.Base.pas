@@ -180,7 +180,7 @@ begin
   GraphicSetEx   := 0;
   SuperLemming   := False;
   ScreenPosition := 0;
-  Title          := '';
+  Title          := string.Empty;
 end;
 
 constructor TLevelInfo.Create;
@@ -250,7 +250,7 @@ end;
 
 procedure TLevel.SaveToStream(S: TStream);
 begin
-  Throw('SaveToStream not implemented', 'SaveToStream');
+  Throw('not implemented', 'TLevel.SaveToStream');
 end;
 
 end.

@@ -118,6 +118,26 @@ type
   );
 
 const
+  ACTION_BIT_WALKING     = 1 shl Ord(TLemmingAction.Walking);
+  ACTION_BIT_JUMPING     = 1 shl Ord(TLemmingAction.Jumping);
+  ACTION_BIT_DIGGING     = 1 shl Ord(TLemmingAction.Digging);
+  ACTION_BIT_CLIMBING    = 1 shl Ord(TLemmingAction.Climbing);
+  ACTION_BIT_DROWNING    = 1 shl Ord(TLemmingAction.Drowning);
+  ACTION_BIT_HOISTING    = 1 shl Ord(TLemmingAction.Hoisting);
+  ACTION_BIT_BUILDING    = 1 shl Ord(TLemmingAction.Building);
+  ACTION_BIT_BASHING     = 1 shl Ord(TLemmingAction.Bashing);
+  ACTION_BIT_MINING      = 1 shl Ord(TLemmingAction.Mining);
+  ACTION_BIT_FALLING     = 1 shl Ord(TLemmingAction.Falling);
+  ACTION_BIT_FLOATING    = 1 shl Ord(TLemmingAction.Floating);
+  ACTION_BIT_SPLATTING   = 1 shl Ord(TLemmingAction.Splatting);
+  ACTION_BIT_EXITING     = 1 shl Ord(TLemmingAction.Exiting);
+  ACTION_BIT_VAPORIZING  = 1 shl Ord(TLemmingAction.Vaporizing);
+  ACTION_BIT_BLOCKING    = 1 shl Ord(TLemmingAction.Blocking);
+  ACTION_BIT_SHRUGGING   = 1 shl Ord(TLemmingAction.Shrugging);
+  ACTION_BIT_OHNOING     = 1 shl Ord(TLemmingAction.Ohnoing);
+  ACTION_BIT_EXPLODING   = 1 shl Ord(TLemmingAction.Exploding);
+
+const
   AssignableSkills = [
     TLemmingAction.Digging,
     TLemmingAction.Climbing,
@@ -169,10 +189,9 @@ const
     TLemmingAction.None
   );
 
-
 type
-  // NEVER change this. If items are added then AFTER dgoAssignClimberShruggerActionBug.
-  // It is stored in replayfile (2 bytes. there is room for more inside the replay)
+  // NEVER change this. If items are added then AFTER RightClickGlitch.
+  // It is stored in replayfiles (2 bytes. there is room for 3 more bits)
   TMechanic = (
     DisableObjectsAfter15,            // #0 objects with index higher than 15 will not work
     MinerOneWayRightBug,              // #1 the miner bug check
@@ -190,9 +209,35 @@ type
   );
   TMechanics = set of TMechanic;
 
-const
-  ALL_MECHANICS = [Low(TMechanic)..High(TMechanic)];
+  TMechanicHelper = record helper for TMechanic
+  public
+    function AsString: string;
+  end;
 
+  TMechanicsHelper = record helper for TMechanics
+  public
+    const ALL = [Low(TMechanic)..High(TMechanic)];
+  public
+    function Get(const mech: TMechanic): Boolean; inline;
+  public
+    function AsText(align, useBullets, useTabs: Boolean): string;
+  // easy access
+    property DisableObjectsAfter15            : Boolean index TMechanic.DisableObjectsAfter15 read Get;
+    property MinerOneWayRightBug              : Boolean index TMechanic.MinerOneWayRightBug read Get;
+    property Obsolete                         : Boolean index TMechanic.Obsolete read Get;
+    property SplattingExitsBug                : Boolean index TMechanic.SplattingExitsBug read Get;
+    property OldEntranceABBAOrder             : Boolean index TMechanic.OldEntranceABBAOrder read Get;
+    property EntranceX25                      : Boolean index TMechanic.EntranceX25 read Get;
+    property FallerStartsWith3                : Boolean index TMechanic.FallerStartsWith3 read Get;
+    property Max4EnabledEntrances             : Boolean index TMechanic.Max4EnabledEntrances read Get;
+    property AssignClimberShruggerActionBug   : Boolean index TMechanic.AssignClimberShruggerActionBug read Get;
+    property TriggeredTrapLemmixBugSolved     : Boolean index TMechanic.TriggeredTrapLemmixBugSolved read Get;
+    property NukeGlitch                       : Boolean index TMechanic.NukeGlitch read Get;
+    property PauseGlitch                      : Boolean index TMechanic.PauseGlitch read Get;
+    property RightClickGlitch                 : Boolean index TMechanic.RightClickGlitch read Get;
+  end;
+
+const
   DOSORIG_MECHANICS = [
     TMechanic.DisableObjectsAfter15,
     TMechanic.MinerOneWayRightBug,
@@ -225,8 +270,6 @@ const
     TMechanic.Max4EnabledEntrances,
     TMechanic.TriggeredTrapLemmixBugSolved
   ];
-
-  // todo: add 'best' mechanics. watch out for entrances order
 
 type
   TSoundEffect = (
@@ -263,18 +306,43 @@ type
     function IsCustom: Boolean; inline;
   end;
 
-  TMechanicsHelper = record helper for TMechanics
-  public
-    function AsText(align: Boolean = False): string;
-  end;
-
 implementation
 
 { TSoundEffectHelper }
 
 function TSoundEffectHelper.AsFileName(const ext: string): string;
 begin
-  Result := Enum.AsString(Self) + ext;
+  // Result := Enum.AsString(Self) + ext;
+  case Self of
+    TSoundEffect.None              : Result := 'None';
+    TSoundEffect.BuilderWarning    : Result := 'BuilderWarning';
+    TSoundEffect.AssignSkill       : Result := 'AssignSkill';
+    TSoundEffect.Yippee            : Result := 'Yippee';
+    TSoundEffect.Splat             : Result := 'Splat';
+    TSoundEffect.LetsGo            : Result := 'LetsGo';
+    TSoundEffect.EntranceOpening   : Result := 'EntranceOpening';
+    TSoundEffect.Vaporizing        : Result := 'Vaporizing';
+    TSoundEffect.Drowning          : Result := 'Drowning';
+    TSoundEffect.Explosion         : Result := 'Explosion';
+    TSoundEffect.HitsSteel         : Result := 'HitsSteel';
+    TSoundEffect.Ohno              : Result := 'Ohno';
+    TSoundEffect.SkillButtonSelect : Result := 'SkillButtonSelect';
+    TSoundEffect.RopeTrap          : Result := 'RopeTrap';
+    TSoundEffect.TenTonTrap        : Result := 'TenTonTrap';
+    TSoundEffect.BearTrap          : Result := 'BearTrap';
+    TSoundEffect.ElectroTrap       : Result := 'ElectroTrap';
+    TSoundEffect.SpinningTrap      : Result := 'SpinningTrap';
+    TSoundEffect.SquishingTrap     : Result := 'SquishingTrap';
+    TSoundEffect.Miner             : Result := 'Miner';
+    TSoundEffect.Digger            : Result := 'Digger';
+    TSoundEffect.Basher            : Result := 'Basher';
+    TSoundEffect.OpenUmbrella      : Result := 'OpenUmbrella';
+    TSoundEffect.SilentDeath       : Result := 'SilentDeath';
+    TSoundEffect.Nuke              : Result := 'Nuke';
+  else
+    Result := 'SoundEffect' + Ord(Self).ToString;
+  end;
+  Result := Result + ext;
 end;
 
 function TSoundEffectHelper.IsCustom: Boolean;
@@ -282,38 +350,89 @@ begin
   Result := Self >= TSoundEffect.Miner;
 end;
 
-{ TMechanicsHelper }
+{ TMechanicHelper }
 
-function TMechanicsHelper.AsText(align: Boolean = False): string;
-// used in replay in info form
-const
-  descriptions: array[TMechanic] of string = (
-   'Disabled objects after #15',
-   'Miner One Way Right Bug',
-   'Obsolete (must be on)',
-   'Splatting Exits Bug',
-   'Old Entrance ABBA Order',
-   'Entrance of first lemming at X=25',
-   'Faller starts with 3 Falling pixels', // 35 length
-   'Max 4 Enabled Entrances',
-   'Assign Climber Shrugger Action Bug',
-   'TriggeredTrap LemmixBug Solved',
-   'Optional Nuke Glitch',
-   'Optional Pause Glitch',
-   'Optional Right Click Glitch'
-  );
-
-
+function TMechanicHelper.AsString: string;
 begin
-  Result := '';
-  if not align then
-    for var m: TMechanic in ALL_MECHANICS do
-      Result := Result + descriptions[m] + ': ' + YesNo(m in Self) + sLineBreak
-  else
-    for var m: TMechanic in ALL_MECHANICS do
-      Result := Result + descriptions[m].PadRight(35) + ': ' + YesNo(m in Self) + sLineBreak;
+  case Self of
+    TMechanic.DisableObjectsAfter15            : Result := 'Disabled objects after #15';
+    TMechanic.MinerOneWayRightBug              : Result := 'Miner One Way Right Bug';
+    TMechanic.Obsolete                         : Result := 'Obsolete';
+    TMechanic.SplattingExitsBug                : Result := 'Splatting Exit Bug';
+    TMechanic.OldEntranceABBAOrder             : Result := 'Old Entrance ABBA Order';
+    TMechanic.EntranceX25                      : Result := 'Lemmings spawn at X=25';
+    TMechanic.FallerStartsWith3                : Result := 'Faller starts with 3 Falling pixels';
+    TMechanic.Max4EnabledEntrances             : Result := 'Max 4 Enabled Entrances';
+    TMechanic.AssignClimberShruggerActionBug   : Result := 'Assign Climber Shrugger Action Bug';
+    TMechanic.TriggeredTrapLemmixBugSolved     : Result := 'TriggeredTrap LemmixBug Solved';
+    TMechanic.NukeGlitch                       : Result := 'Nuke Glitch';
+    TMechanic.PauseGlitch                      : Result := 'Pause Glitch';
+    TMechanic.RightClickGlitch                 : Result := 'Right Click Glitch';
+    else
+      Result := Ord(Self).ToString;
+  end;
 end;
 
+{ TMechanicsHelper }
+
+function TMechanicsHelper.Get(const mech: TMechanic): Boolean;
+begin
+  Result := mech in Self;
+end;
+
+
+function TMechanicsHelper.AsText(align, useBullets, useTabs: Boolean): string;
+// used in replay.txt in info form
+var
+  bullet: string;
+  sep: string;
+
+    function MyYesNo(const b: Boolean): string;
+    begin
+      if b then Result := 'yes' else Result := 'no'; // do not localize
+    end;
+
+const
+  // do not localize
+  descriptions: array[TMechanic] of string = (
+    'Disabled objects after #15',
+    'Miner One Way Right Bug',
+    'Obsolete (must be on)',
+    'Splatting Exits Bug',
+    'Old Entrance ABBA Order',
+    'Lemmings spawn at X=25',
+    'Faller starts with 3 Falling pixels', // 35 length
+    'Max 4 Enabled Entrances',
+    'Assign Climber Shrugger Action Bug',
+    'TriggeredTrap LemmixBug Solved',
+    'Optional Nuke Glitch',
+    'Optional Pause Glitch',
+    'Optional Right Click Glitch'
+ );
+begin
+  if useBullets
+  then bullet := '• '
+  else bullet := string.Empty;
+
+  if useTabs
+  then sep := tab
+  else sep := ' : ';
+
+  Result := string.Empty;
+  if not align then
+    for var m: TMechanic in TMechanics.ALL do
+      Result := Result + bullet + descriptions[m] + sep + MyYesNo(m in Self) + CRLF
+  else
+    for var m: TMechanic in TMechanics.ALL do
+      Result := Result + bullet + descriptions[m].PadRight(35 + Length(bullet)) + sep + MyYesNo(m in Self) + CRLF;
+
+  Result := Result.TrimRight;
+end;
+
+{$ifdef paranoid}
+initialization
+  Assert(Ord(High(TSoundEffect)) = 24, 'SoundEffect enum error');
+{$endif}
 end.
 
 

@@ -9,9 +9,9 @@ uses
   System.Classes, Vcl.Controls, Vcl.Graphics, Vcl.Forms, System.SysUtils, Vcl.Dialogs,
   GR32, GR32_Image, GR32_Layers,
   Dos.Structures,
-  Base.Utils, Base.Bitmaps,
+  Base.Utils, Base.Types, Base.Bitmaps,
   Form.Base,
-  Prog.Base, Prog.Types, Prog.App,
+  Prog.Base, Prog.App,
   Dos.MainDat;
 
 const
@@ -22,10 +22,19 @@ const
   PurpleFontCharSet = ['!'..'~'];
 
 type
+  TFontRecolor = ( // not used yet
+    Purple,
+    Red, // hue = 100
+    Blue, // hue = -24
+    Brown, // hue = 140
+    Green, // hue = -138
+    Pink     // 0.85 (correct)
+  );
+
   TPurpleFont = class(TComponent)
   private
     function GetBitmapOfChar(Ch: Char): TBitmap32;
-    procedure Combine(F: TColor32; var B: TColor32; M: TColor32);
+    class procedure Combine(F: TColor32; var B: TColor32; M: TColor32); static;
   protected
   public
     fBitmaps: array[0..PURPLEFONTCOUNT - 1] of TBitmap32;
@@ -37,7 +46,7 @@ type
 
   // This is the ancestor for all DOS-forms that are used in the program.
   // Using the Prog.App unit indicates that the global App can be used.
-  TGameBaseScreen = class(TBaseDosForm)
+  TGameBaseScreen = class(TAppForm)
   private
     fMainDatExtractor    : TMainDatExtractor;
     fScreenImg           : TImage32;
@@ -51,7 +60,6 @@ type
     procedure AdjustImage;
     procedure MakeList(const S: string; aList: TStrings);
   protected
-    procedure PrepareGameParams; override;
     procedure BeforeCloseScreen(aNextScreen: TGameScreenType); override;
     property MainDatExtractor: TMainDatExtractor read fMainDatExtractor;
     property CloseDelay: Integer read fCloseDelay write fCloseDelay;
@@ -61,7 +69,7 @@ type
     procedure TileBackgroundBitmap(X, Y: Integer; Dst: TBitmap32 = nil);
     procedure ExtractBackGround;
     procedure ExtractPurpleFont;
-    procedure DrawPurpleText(Dst: TBitmap32; const S: string; X, Y: Integer; aRestoreBuffer: TBitmap32 = nil);
+    procedure DrawPurpleText(Dst: TBitmap32; const S: string; X, Y: Integer; recolor: TFontRecolor = TFontRecolor.Purple; aRestoreBuffer: TBitmap32 = nil);
     procedure DrawPurpleTextCentered(Dst: TBitmap32; const S: string; Y: Integer; aRestoreBuffer: TBitmap32 = nil; EraseOnly: Boolean = False);
     function CalcPurpleTextSize(const S: string): TRect;
     procedure FadeOut;
@@ -75,9 +83,14 @@ type
 
 implementation
 
+{$ifdef debug}
+uses
+  Prog.Tools;
+{$endif}
+
 { TPurpleFont }
 
-procedure TPurpleFont.Combine(F: TColor32; var B: TColor32; M: TColor32);
+class procedure TPurpleFont.Combine(F: TColor32; var B: TColor32; M: TColor32);
 // just show transparent
 begin
   if F <> 0 then B := F;
@@ -110,7 +123,7 @@ function TPurpleFont.GetBitmapOfChar(Ch: Char): TBitmap32;
 var
   Idx: Integer;
 begin
-  Assert(CharInSet(Ch, ['!'..'~'])); // paranoid
+  {$ifdef paranoid} Assert(CharInSet(Ch, ['!'..'~'])); {$endif}
   Idx := Ord(Ch) - ord('!');
   Result := fBitmaps[Idx];
 end;
@@ -122,7 +135,7 @@ begin
   ForceDirectories(aDir);
   for i := 0 to PURPLEFONTCOUNT - 1 do
   begin
-    fBitmaps[i].SaveToFile(aDir + '' + 'purplefont' + LeadZeroStr(i, 2) + '.bmp');
+    fBitmaps[i].SaveToFile(aDir + 'purplefont' + LeadZeroStr(i, 2) + '.bmp');
   end;
 end;
 
@@ -149,10 +162,10 @@ procedure TGameBaseScreen.BeforeCloseScreen(aNextScreen: TGameScreenType);
 begin
   if aNextScreen <> TGameScreenType.Interrupted then begin
     if fCloseDelay > 0 then begin
-      Update;
+      Repaint;
       Sleep(fCloseDelay);
     end;
-    if App.Config.UseFadeOut then
+    if App.Config.FormOptions.FadeOut then
       FadeOut;
   end;
 end;
@@ -168,7 +181,7 @@ begin
   fBackBuffer := TBitmap32.Create;
   fMainDatExtractor := TMainDatExtractor.Create;
   fStretched := DEF_STRETCHED;
-  if not App.Config.ShowDefaultCursor then begin
+  if not App.Config.FormOptions.ShowDefaultCursor then begin
     Cursor := crNone;
     ScreenImg.Cursor := crNone;
   end;
@@ -193,7 +206,7 @@ var
 begin
   CX := 0;
   FillChar(Result, SizeOf(Result), 0);
-  if S <> '' then
+  if not S.IsEmpty then
     Result.Bottom := 16;
   for i := 1 to Length(S) do
   begin
@@ -214,23 +227,30 @@ begin
   end;
 end;
 
-procedure TGameBaseScreen.DrawPurpleText(Dst: TBitmap32; const S: string; X, Y: Integer; aRestoreBuffer: TBitmap32 = nil);
+procedure TGameBaseScreen.DrawPurpleText(Dst: TBitmap32; const S: string; X, Y: Integer; recolor: TFontRecolor = TFontRecolor.Purple; aRestoreBuffer: TBitmap32 = nil);
 //  Linefeeds increment 16 pixels
 //  Spaces increment 16 pixels
+// TODO: colorizing fonts with HSL?
 var
   C: Char;
   CX, CY, i: Integer;
   R: TRect;
-  bmp: TBitmap32;
+  bmp, tmp: TBitmap32;
 begin
+
+
+  if S.IsEmpty then
+    Exit;
 
   if aRestoreBuffer <> nil then
   begin
     R := CalcPurpleTextSize(S);
     R.OffSet(X, Y);
-    IntersectRect(R, R, aRestoreBuffer.BoundsRect); // oops, again watch out for sourceretangle!
+    IntersectRect(R, R, aRestoreBuffer.BoundsRect);
     aRestoreBuffer.DrawTo(Dst, R, R);
   end;
+
+  tmp := TBitmap32.Create;
 
   CX := X;
   CY := Y;
@@ -249,13 +269,16 @@ begin
       '!'..'~':
         begin
           bmp := fPurpleFont.BitmapOfChar[C];
-          bmp.DrawTo(Dst, CX, CY);
-          // todo: add optional recoloring
+          tmp.Assign(bmp);
+          tmp.DrawMode := bmp.DrawMode;
+          tmp.OnPixelCombine := bmp.OnPixelCombine;
+          tmp.DrawTo(Dst, CX, CY);
           Inc(CX, 16);
         end;
     end;
   end;
 
+  tmp.Free;
 end;
 
 procedure TGameBaseScreen.DrawPurpleTextCentered(Dst: TBitmap32; const S: string; Y: Integer; aRestoreBuffer: TBitmap32 = nil; EraseOnly: Boolean = False);
@@ -302,40 +325,14 @@ var
   PurpleFontPos: Integer;
 begin
   Pal := GetDosMainMenuPaletteColors32;
-  if Consts.StyleDef = TStyleDef.Ohno
+  if (Consts.StyleDef = TStyleDef.Ohno) or (Consts.StyleInfo.MaindatOhNo)
   then PurpleFontPos := $69B0 + 972 // there are 5 signs in ohno stored before the purple font (5 sections)
   else PurpleFontPos := $69B0;
   // read first
   MainDatExtractor.ExtractBitmap(fPurpleFont.fBitmaps[0], 4, PurpleFontPos, 16, 16, 3, Pal);
-  // the position is now updated automatically by stream reading (-1 parameter)
+  // the position is updated automatically by stream reading (-1 parameter)
   for i := 1 to PURPLEFONTCOUNT - 1 do
     MainDatExtractor.ExtractBitmap(fPurpleFont.fBitmaps[i], 4, -1, 16, 16, 3, Pal);
-
-(*
-
-  for i := 0 to Length(PurpleFont.fBitmaps) - 1 do begin
-    var bmp: TBitmap32 := TBitmap32.Create;
-    bmp.Assign(PurpleFont.BitmapOfChar['A']);
-    bmp.Recolor(clRed32);
-    var filename := Consts.PathToDebugFiles + 'Ared' + '.bmp';
-    bmp.SaveToFile(filename);
-    bmp.Assign(PurpleFont.BitmapOfChar['A']);
-    bmp.Recolor(clMaroon32);
-    filename := Consts.PathToDebugFiles + 'Amaroon' + '.bmp';
-    bmp.SaveToFile(filename);
-    bmp.Assign(PurpleFont.BitmapOfChar['A']);
-    bmp.Recolor(clGreen32);
-    filename := Consts.PathToDebugFiles + 'Agreen' + '.bmp';
-    bmp.SaveToFile(filename);
-    bmp.Assign(PurpleFont.BitmapOfChar['A']);
-    bmp.Recolor(clLime32);
-    filename := Consts.PathToDebugFiles + 'Alime' + '.bmp';
-    bmp.SaveToFile(filename);
-    bmp.Free;
-  end;
-
-*)
-
 end;
 
 function TGameBaseScreen.InitializeImageSizeAndPosition(aWidth, aHeight: Integer): TRect;
@@ -353,11 +350,6 @@ begin
   AdjustImage;
 end;
 
-procedure TGameBaseScreen.PrepareGameParams;
-begin
-  inherited PrepareGameParams;
-end;
-
 procedure TGameBaseScreen.SetStretched(const Value: Boolean);
 begin
   fStretched := Value;
@@ -368,9 +360,10 @@ procedure TGameBaseScreen.TileBackgroundBitmap(X, Y: Integer; Dst: TBitmap32 = n
 var
   aX, aY: Integer;
 begin
-
+  {$ifdef paranoid}
   Assert(fBackground.Width > 0);
   Assert(fBackground.Height > 0);
+ {$endif}
 
   if Dst = nil then
     Dst := fScreenImg.Bitmap;
@@ -433,31 +426,21 @@ begin
 end;
 
 procedure TGameBaseScreen.FadeOut;
-// todo: for the gamescreen this does not work. the skillpanel is not faded
 var
   A: Integer;
 begin
-//  var bmp := TBitmap.Create;
-//  bmp.SetSize(32, 32);
-//  bmp.Canvas.Brush.Color := clBack;
-//
-//  while A >= 0 do begin
-//    bmp.ScreenImg.Bitmap.ResetAlpha(Byte(A));
-//    Sleep(20);
-//    Dec(A, 8);
-//  end;
-
-  ScreenImg.Bitmap.DrawMode := dmBlend;
-  ScreenImg.RepaintMode := rmDirect;
-  // this is around 640 milliseconds - assuming a fast screenoutput which delays a little bit more we get around 750 ms
-  A := 255;
-  while A >= 0 do begin
-    ScreenImg.Bitmap.ResetAlpha(Byte(A));
+  AlphaBlend := True;
+  A := AlphaBlendValue;
+  Sleep(100);
+  repeat
+    Repaint;
     Sleep(20);
     Dec(A, 8);
-  end;
+    if A < 0 then
+      Break;
+    AlphaBlendValue := A;
+  until False;
 end;
-
 
 end.
 

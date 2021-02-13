@@ -9,27 +9,32 @@ interface
 uses
   System.Classes, System.SysUtils, System.IOUtils, System.Contnrs,
   Dos.Consts,
-  Base.Utils,
-  Prog.Types;
+  Base.Utils, Base.Types;
 
-// levelmapping can be set in config file
+// levelmapping can be set in style.config file
 type
   TLevelGraphicsMapping = (
-    Default,      // mapping as is
-    Orig,         // levels use Orig graphics                             "ORIG"
-    Ohno,         // levels use Ohno graphics                             "OHNO"
-    Concat        // levels are remapped to ORIG+OHNO concatenated        "CONCAT"
+    Default,      // mapping as is in the folder, including all .dat files   "DEFAULT" or empty
+    Orig,         // levels use Orig graphics                                "ORIG"
+    Ohno,         // levels use Ohno graphics                                "OHNO"
+    Concat        // levels are remapped to ORIG+OHNO concatenated           "CONCAT"
   );
 
 type
   TLevelSpecialGraphicsMapping = (
-    Default,      // mapping as is
+    Default,      // mapping as is in the folder
     Orig
   );
 
 type
   Consts = class sealed
   public
+    class var GLOBAL_DEVELOPER_MODUS : Boolean;
+      // god modus
+      // • Create lemmings on the fly at cursor (ctrl + alt + left mousebutton)
+      // • Set all skills to 99 (ctrl + alt + right mousebutton)
+      // • Use in-game debuglayer for game details (ctrl + shift + F12)
+      // • save binary levels voor A.I. engine
 
     type
       TVersionRecord = record
@@ -52,6 +57,7 @@ type
         fUserMechanics: TMechanics; // only used in user styles (config)
         fUserGraphicsMapping: TLevelGraphicsMapping; // only used in user styles (config)
         fUserSpecialGraphicsMapping: TLevelSpecialGraphicsMapping; // only used in user styles (config)
+        fMaindatOhNo: Boolean;
       public
         property StyleDef: TStyleDef read fStyleDef;
         property Family: TStyleFamily read fFamily;
@@ -63,35 +69,47 @@ type
         property UserMechanics: TMechanics read fUserMechanics;
         property UserGraphicsMapping: TLevelGraphicsMapping read fUserGraphicsMapping;
         property UserSpecialGraphicsMapping: TLevelSpecialGraphicsMapping read fUserSpecialGraphicsMapping;
+        property MaindatOhNo: Boolean read fMaindatOhNo;
       end;
 
     TStyleInformationList = class(TFastObjectList<TStyleInformation>);
 
   strict private
-
     const fGraphicSetNames: array[0..8] of string = ('Dirt', 'Fire', 'Marble', 'Pillar', 'Crystal', 'Brick', 'Rock', 'Snow', 'Bubble');
-
   // logos for options screen
     const fFilenameLogo_orig  = 'logo_orig.png';
     const fFilenameLogo_ohno  = 'logo_ohno.png';
-    const fFilenameLogo_h93   = 'logo_h93.png';
     const fFilenameLogo_h94   = 'logo_h94.png';
     const fFilenameLogo_x91   = 'logo_x91.png';
     const fFilenameLogo_x92   = 'logo_x92.png';
-    const fFilenamesLogo      : array[TStyleDef] of string = (fFilenameLogo_orig, fFilenameLogo_ohno, fFilenameLogo_h93, fFilenameLogo_h94, fFilenameLogo_x91, fFilenameLogo_x92, fFilenameLogo_orig);
-
+    const fFilenamesLogo      : array[TStyleDef] of string = (fFilenameLogo_orig, fFilenameLogo_ohno, fFilenameLogo_h94, fFilenameLogo_x91, fFilenameLogo_x92, fFilenameLogo_orig);
   // const resource names
     const fResNameZippedLogos          : string = 'LOGOS';
     const fResNameZippedCursors        : string = 'CURSORS';
     const fResNameZippedSounds         : string = 'SOUNDS';
     const fResNameParticles            : string = 'PARTICLES';
     const fResNameCustom               : string = 'CUSTOM';
+    const fResNameAssets               : string = 'ASSETS';
+  // cursor
     const fFilenameCursorDefault       : string = 'CursorDefault.bmp';
     const fFilenameCursorDefaultMask   : string = 'CursorDefaultMask.bmp';
     const fFilenameCursorHighlight     : string = 'CursorHighlight.bmp';
     const fFilenameCursorHighlightMask : string = 'CursorHighlightMask.bmp';
+    const fFilenameCursorDrag          : string = 'CursorDrag.bmp';
+    const fFilenameCursorDragMask      : string = 'CursorDragMask.bmp';
+    const fFilenameCursorHourglass     : string = 'CursorHourglass.bmp';
+    const fFilenameCursorHourglassMask : string = 'CursorHourglassMask.bmp';
     const fFilenameParticles           : string = 'Particles.dat';
-
+  // assets
+    const fFilenameAssetPillar         : string = 'Pillar.bmp'; // mac bitmap for help screen. black = 0,0,17,255
+    const fFilenameAssetPillarTop      : string = 'PillarTop.bmp'; // mac bitmap for help screen. black = 0,0,17,255
+    const fFilenameAssetCheckBox       : string = 'Checkbox48.png';
+    const fFilenameAssetCheckBoxGray   : string = 'Checkbox48gray.png';
+    const fFilenameAssetCheckBoxTransparent  : string = 'checkbox48transparent.png';
+    const fFilenameAssetCheckBoxGrayTransparent  : string = 'checkbox48graytransparent.png';
+    const fFilenameAssetPlay           : string = 'play48.png';
+  // language
+    const fFilenameLanguageDutch       : string = 'Dutch.config';
   // internal
     class var fLemmixVersion           : string;
     class var fLemmixVersionRecord     : TVersionRecord;
@@ -102,6 +120,7 @@ type
     class var fPathToStyles            : string;
     class var fPathToMusic             : string;
     class var fPathToSounds            : string;
+    class var fPathToReplay            : string;
     class var fInitialized             : Boolean;
     class var fDefined                 : Boolean;
   // current style
@@ -116,15 +135,22 @@ type
   // paths functions
     class function GetAppName: string; static; inline;
     class function GetAppPath: string; static; inline;
-    class function GetPathToDebugFiles: string; static; inline;
-    class function GetPathToCursors: string; static; inline;
     class function GetPathToData: string; static; inline;
+    class function GetPathToDebug: string; static; inline;
+    class function GetPathToAssets: string; static; inline;
+    class function GetPathToCursors: string; static; inline;
+    class function GetPathToLanguage: string; static; inline;
+    class function GetPathToErrorLogs: string; static; inline;
     class function GetPathToLogos: string; static; inline;
     class function GetPathToParticles: string; static; inline;
     class function GetPathToStyles: string; static; inline;
     class function GetPathToStyle(const aStylename: string): string; static; inline;
+    class function GetPathToOutput: string; static; inline;
     class function GetPathToScreenShots: string; static; inline;
     class function GetPathToReplay: string; static; inline;
+    class function GetPathToAutoSave: string; static; inline;
+    class function GetPathToBin: string; static; inline;
+    class function GetPathToTemp: string; static; inline;
     class function GetPathToCache: string; static; inline;
     class function GetPathToLemmings(const aStylename: string): string; static; inline;
     class function GetPathToMusics(const aStylename: string): string; static; inline;
@@ -138,7 +164,7 @@ type
     class procedure Check; static; inline;
   public
     class constructor Create;
-    class procedure Init(const aPathToStyles, aPathToMusic, aPathToSounds: string); static; // must be called at startup
+    class procedure Init(const aPathToStyles, aPathToMusic, aPathToSounds, aPathToReplay: string); static; // must be called at startup
     class procedure Done; static;
     class procedure SetStyleName(const aName: string); static;
   // styledef
@@ -153,16 +179,23 @@ type
   // paths
     class property AppName: string read GetAppName;
     class property AppPath: string read GetAppPath;
-    class property PathToDebugFiles: string read GetPathToDebugFiles;
+    class property PathToDebug: string read GetPathToDebug;
+    class property PathToAssets: string read GetPathToAssets;
     class property PathToData: string read GetPathToData;
+    class property PathToErrorLogs: string read GetPathToErrorLogs;
     class property PathToLogos: string read GetPathToLogos;
     class property PathToCursors: string read GetPathToCursors;
+    class property PathToLanguage: string read GetPathToLanguage;
     class property PathToParticles: string read GetPathToParticles;
     class property PathToSounds: string read GetPathToSounds;
     class property PathToStyle[const aStylename: string]: string read GetPathToStyle;
     class property PathToStyles: string read GetPathToStyles;
+    class property PathToOutput: string read GetPathToOutput;
     class property PathToScreenShots: string read GetPathToScreenShots;
     class property PathToReplay: string read GetPathToReplay;
+    class property PathToAutoSave: string read GetPathToAutoSave;
+    class property PathToBin: string read GetPathToBin;
+    class property PathToTemp: string read GetPathToTemp;
     class property PathToCache: string read GetPathToCache;
     class property PathToLemmings[const aStylename: string]: string read GetPathToLemmings;
     class property PathToMusics[const aStylename: string]: string read GetPathToMusics;
@@ -172,10 +205,27 @@ type
     class property ResNameZippedSounds: string read fResNameZippedSounds;
     class property ResNameParticles: string read fResNameParticles;
     class property ResNameCustom: string read fResNameCustom;
+    class property ResNameAssets: string read fResNameAssets;
+  // resource cursors
     class property FilenameCursorDefault: string read fFilenameCursorDefault;
     class property FilenameCursorDefaultMask: string read fFilenameCursorDefaultMask;
     class property FilenameCursorHighlight: string read fFilenameCursorHighlight;
     class property FilenameCursorHighlightMask: string read fFilenameCursorHighlightMask;
+    class property FilenameCursorDrag: string read fFilenameCursorDrag;
+    class property FilenameCursorDragMask: string read fFilenameCursorDragMask;
+    class property FilenameCursorHourglass: string read fFilenameCursorHourglass;
+    class property FilenameCursorHourglassMask: string read fFilenameCursorHourglassMask;
+  // resource assets
+    class property FilenameAssetPillar: string read fFilenameAssetPillar;
+    class property FilenameAssetPillarTop: string read fFilenameAssetPillarTop;
+    class property FilenameAssetCheckBox: string read fFilenameAssetCheckBox;
+    class property FilenameAssetCheckBoxGray: string read fFilenameAssetCheckBoxGray;
+    class property FilenameAssetCheckBoxTransparent: string read fFilenameAssetCheckBoxTransparent;
+    class property FilenameAssetCheckBoxGrayTransparent: string read fFilenameAssetCheckBoxGrayTransparent;
+    class property FilenameAssetPlay: string read fFilenameAssetPlay;
+  // language
+    class property FilenameLanguageDutch: string read fFilenameLanguageDutch;
+  // resource lemming misc
     class property FilenameParticles: string read fFilenameParticles;
     class property ResourceNameZippedLemmings[const aStylename: string]: string read GetResourceNameZippedLemmings;
     class property ResourceNameZippedMusics[const aStylename: string]: string read GetResourceNameZippedMusics;
@@ -206,6 +256,9 @@ class constructor Consts.Create;
 var
   betaString: string;
 begin
+  {$ifdef debug}
+  GLOBAL_DEVELOPER_MODUS := True;
+  {$endif}
   fCachedAppName := ParamStr(0);
   fCachedAppPath := ExtractFilePath(ParamStr(0));
   fLemmixVersion := GetAppVersionString(fLemmixVersionRecord.Major, fLemmixVersionRecord.Minor, fLemmixVersionRecord.Release, fLemmixVersionRecord.Build);
@@ -214,15 +267,29 @@ begin
   betaString := 'beta';
   {$else}
   fIsBeta := False;
-  betaString := '';
+  betaString := string.Empty;
   {$endif};
   fFullProgramName := 'Lemmix ' + betaString + ' ' + fLemmixVersion + ' - ' + {$if defined(cpux64)} '64 bits' {$else} '32 bits' {$endif};
+  // set defaults
   fPathToStyles := fCachedAppPath + 'Data\Styles\';
+  fPathToReplay := fCachedAppPath + 'Output\Replay\';
 end;
 
-class procedure Consts.Init(const aPathToStyles, aPathToMusic, aPathToSounds: string);
+class procedure Consts.Init(const aPathToStyles, aPathToMusic, aPathToSounds, aPathToReplay: string);
+//
+{ load the styles. style.config is parsed. properties are set in StyleInformation
+  Possible entries:
+  • Description     = MyText
+  • Author          = MyName
+  • Info            = MyInfo
+  • Graphics        = DEFAULT or ORIG or OHNO or CONCAT
+  • SpecialGraphics = ORIG or DEFAULT
+  • Mechanics       = OHNO or ORIG
+  • Maindat         = OHNO or ORIG
+  • Family          = LEMMINI
+}
 const
-  Texts: array[TStyleDef] of string = ('Original Lemmings', 'Oh No More Lemmings!', 'Holiday Lemmings 1993', 'Holiday Lemmings 1994', 'Xmas Lemmings 1991', 'Xmas Lemmings 1992', 'User Lemmings');
+  Texts: array[TStyleDef] of string = ('Original Lemmings', 'Oh No More Lemmings!', 'Holiday Lemmings 1994', 'Xmas Lemmings 1991', 'Xmas Lemmings 1992', 'User Lemmings');
 var
   value: string;
   list: TStringList;
@@ -236,15 +303,13 @@ begin
   if not aPathToSounds.IsEmpty and TDirectory.Exists(aPathToSounds) then
     fPathToSounds := IncludeTrailingPathDelimiter(aPathToSounds);
 
+  if not aPathToReplay.IsEmpty and TDirectory.Exists(aPathToReplay) then
+    fPathToReplay := IncludeTrailingPathDelimiter(aPathToReplay);
+
   fStyleInformationList := TStyleInformationList.Create;
 
-  fSupportedStyleNames := [TStyleDef.Orig.Name] +
-                          [TStyleDef.Ohno.Name] +
-                          [TStyleDef.H93.Name] +
-                          [TStyleDef.H94.Name] +
-                          [TStyleDef.X91.Name] +
-                          [TStyleDef.X92.Name] +
-                          GetCustomStyleFolders;
+  fSupportedStyleNames := [TStyleDef.Orig.Name] + [TStyleDef.Ohno.Name] + [TStyleDef.H94.Name] + [TStyleDef.X91.Name] +
+                          [TStyleDef.X92.Name] + GetCustomStyleFolders;
 
   // fill style information
   var ix: Integer :=0;
@@ -290,6 +355,10 @@ begin
                 value := list.Values['specialgraphics'].ToUpper.Trim;
                 if (value = 'ORIG') then info.fUserSpecialGraphicsMapping := TLevelSpecialGraphicsMapping.Orig
                 else info.fUserSpecialGraphicsMapping := TLevelSpecialGraphicsMapping.Default;
+                // maindat read default or ohno (purple font is in different location because of section 5)
+                value := list.Values['maindat'].ToUpper.Trim;
+                if (value = 'OHNO') and (info.fUserGraphicsMapping = TLevelGraphicsMapping.Default) then info.fMaindatOhNo := True
+                else info.fMaindatOhNo := False;
               end;
             TStyleFamily.Lemmini:
               begin
@@ -316,9 +385,7 @@ begin
   end;
 
   fInitialized := True;
-
   SetStyleName(TStyleDef.Orig.Name);
-
 end;
 
 class procedure Consts.Done;
@@ -336,14 +403,29 @@ begin
   Result := fCachedAppPath;
 end;
 
-class function Consts.GetPathToDebugFiles: string;
+class function Consts.GetPathToStyles: string;
+begin
+  Result := fPathToStyles;
+end;
+
+class function Consts.GetPathToDebug: string;
 begin
   Result := GetAppPath + '_debug\';
+end;
+
+class function Consts.GetPathToAssets: string;
+begin
+  Result := GetAppPath + 'Assets\';
 end;
 
 class function Consts.GetPathToCursors: string;
 begin
   Result := GetAppPath + 'Cursors\';
+end;
+
+class function Consts.GetPathToErrorLogs: string;
+begin
+  Result := GetAppPath + 'Output\Logs\';
 end;
 
 class function Consts.GetPathToData: string;
@@ -361,9 +443,9 @@ begin
   Result := GetPathToData + 'Particles\';
 end;
 
-class function Consts.GetPathToStyles: string;
+class function Consts.GetPathToLanguage: string;
 begin
-  Result := fPathToStyles;//GetPathToData + 'Styles\';
+  Result := GetPathToData + 'Language\';
 end;
 
 class function Consts.GetPathToStyle(const aStylename: string): string;
@@ -371,14 +453,29 @@ begin
   Result := GetPathToStyles + aStylename + '\';
 end;
 
+class function Consts.GetPathToOutput: string;
+begin
+  Result := GetAppPath + 'Output\';
+end;
+
 class function Consts.GetPathToScreenShots: string;
 begin
   Result := GetAppPath + 'Output\ScreenShots\';
 end;
 
-class function Consts.GetPathToReplay: string;
+class function Consts.GetPathToAutoSave: string;
 begin
-  Result := GetAppPath + 'Output\Replay\';
+  Result := GetAppPath + 'Output\AutoSave\';
+end;
+
+class function Consts.GetPathToBin: string;
+begin
+  Result := GetAppPath + 'Output\Bin\';
+end;
+
+class function Consts.GetPathToTemp: string;
+begin
+  Result := GetAppPath + 'Output\Temp\';
 end;
 
 class function Consts.GetPathToCache: string;
@@ -408,6 +505,15 @@ begin
     Result := fPathToSounds
   else
     Result := GetPathToData + 'Sounds\';
+end;
+
+class function Consts.GetPathToReplay: string;
+begin
+  Check;
+  if not fPathToReplay.IsEmpty then
+    Result := fPathToReplay
+  else
+    Result := GetPathToData + 'Output\Replay\';
 end;
 
 class function Consts.GetResourceNameZippedLemmings(const aStylename: string): string;
@@ -445,7 +551,6 @@ class procedure Consts.SetStyleName(const aName: string);
 var
   found: TStyleDef;
   newName: string;
-  // todo: rework and let everything depend in StyleInformation
 begin
   Check;
   if fDefined and SameText(fStyleName, aName) then
@@ -459,7 +564,7 @@ begin
       Break;
     end;
 
-  // fallback
+  // fallback on default
   if not Exists then
     newName := TStyleDef.Orig.Name;
 
@@ -478,7 +583,7 @@ begin
     fStylename := newName;
   end;
 
-  fChristmasPalette := fStyleDef in [TStyleDef.H93, TStyleDef.H94, TStyleDef.X91, TStyleDef.X92];
+  fChristmasPalette := fStyleDef in [TStyleDef.H94, TStyleDef.X91, TStyleDef.X92];
   fDefined := True;
 end;
 

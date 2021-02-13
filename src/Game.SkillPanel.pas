@@ -8,22 +8,13 @@ uses
   GR32, GR32_Image, GR32_Layers,
   Dos.Compression,
   Dos.Structures,
-  Base.Utils, Base.Bitmaps,
-  Prog.Strings, Prog.Base, Prog.Data,
+  Base.Utils, Base.Bitmaps, Base.Strings,
+  Prog.Base, Prog.Data,
   Dos.Bitmaps,
   Dos.Consts,
   Level.Base,
   Styles.Base;
 
-  {-------------------------------------------------------------------------------
-    maybe this must be handled by lemgame (just bitmap writing)
-
-    // info positions types above the toolbar
-    // 1. BUILDER(23)             1/14
-    // 2. OUT 28                  15/23
-    // 3. IN 99%                  24/31
-    // 4. TIME 2-31               32/40
-  -------------------------------------------------------------------------------}
 type
   TMinimapClickEvent = procedure(Sender: TObject; const P: TPoint) of object;
   TSkillButtonsMouseDownEvent = procedure(aButton: TSkillPanelButton; isDoubleClick: Boolean) of object;
@@ -32,43 +23,57 @@ type
 type
   TSkillPanelToolbar = class(TCustomControl)
   private
-    fGraph                   : TGraphicSet;
-    fImg                     : TImage32;
-    fOriginal                : TBitmap32;
-    fSkillFont               : array['0'..'9', 0..1] of TBitmap32; // todo make one bitmap
-    fInfoFont                : array[0..37] of TBitmap32; {%} {0..9} {A..Z} // todo make one bitmap
-    fButtonRects             : array[TSkillPanelButton] of TRect;
-    fRectColor               : TColor32;
-    fOnMinimapClick          : TMinimapClickEvent; // event handler for minimap
-    fOnSkillButtonsMouseDown : TSkillButtonsMouseDownEvent;
-    fOnSkillButtonsMouseUp   : TSkillButtonsMouseUpEvent;
+    fGraph                     : TGraphicSet;
+    fImg                       : TImage32;
+    fOriginal                  : TBitmap32;
+    fSkillFont                 : array['0'..'9', 0..1] of TBitmap32; // one bitmap would take less resources
+    fInfoFont                  : array[0..37] of TBitmap32; {%} {0..9} {A..Z} // one bitmap would take less resources
+    fButtonRects               : array[TSkillPanelButton] of TRect;
+    fRectColor                 : TColor32;
+    fLastDrawnStr              : string;
+    fNewDrawStr                : string;
+    fOnMinimapClick            : TMinimapClickEvent; // event handler for minimap
+    fOnSkillButtonsMouseDown   : TSkillButtonsMouseDownEvent;
+    fOnSkillButtonsMouseUp     : TSkillButtonsMouseUpEvent;
+    fIsPauseButtonHighlighted  : Boolean;
+    fPauseButtonChanged        : Boolean;
+    fPauseButtonBuffer         : TBitmap32;
   // imageview events
     procedure ImgMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer; Layer: TCustomLayer);
     procedure ImgMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer; Layer: TCustomLayer);
     procedure ImgMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer; Layer: TCustomLayer);
   protected
-    procedure ReadBitmapFromStyle(aStyle: TStyle);
     procedure SetButtonRects;
+    procedure ReadBitmapFromStyle(aStyle: TStyle);
+    procedure InitPauseButtonBuffer;
   public
-    fLastDrawnStr: string;
-    fNewDrawStr: string;
+  // todo: make private some stuff
     constructor Create(aOwner: TComponent); override;
     destructor Destroy; override;
     procedure DrawNewStr;
+    procedure DrawCheckPauseButton;
     property Img: TImage32 read fImg;
+    procedure SetStyleAndGraph(aStyle: TStyle; aGraph: TGraphicSet; aScale: Integer);
+  // updating methods for hyperspeed
+    procedure BeginUpdateImg; inline;
+    procedure EndUpdateImg; inline;
+    function GetUpdateCount: Integer; inline;
   // paint methods (called directly from game and gamescreen)
     procedure DrawSkillCount(aButton: TSkillPanelButton; aNumber: Integer);
     procedure DrawButtonSelector(aButton: TSkillPanelButton; Highlight: Boolean);
+    procedure SwitchButtonSelector(oldButton, newButton: TSkillPanelButton);
     procedure DrawMinimap(Map: TBitmap32);
+  // change green text methods
     procedure SetInfoAlternative(const info: string);
     procedure SetInfoCursorLemming(const Lem: string; Num: Integer);
     procedure SetInfoLemmingsOut(Num: Integer);
-    procedure SetInfoLemmingsIn(Num, Max: Integer);
+    procedure SetInfoLemmingsSaved(Num, Max: Integer; showcount: Boolean);
     procedure SetInfoMinutes(Num: Integer);
     procedure SetInfoSeconds(Num: Integer);
-    procedure SetStyleAndGraph(aStyle: TStyle; aGraph: TGraphicSet; aScale: Integer);
+    procedure SetPauseHighlight(highlight: Boolean);
+  // repaint stuff
     procedure RefreshInfo;
-  // events (for gamescreen, who is responsible for game instructions)
+  // events for gamescreen, which is responsible for game instructions
     property OnMinimapClick: TMinimapClickEvent read fOnMinimapClick write fOnMinimapClick;
     property OnSkillButtonsMouseDown: TSkillButtonsMouseDownEvent read fOnSkillButtonsMouseDown write fOnSkillButtonsMouseDown;
     property OnSkillButtonsMouseUp: TSkillButtonsMouseUpEvent read fOnSkillButtonsMouseUp write fOnSkillButtonsMouseUp;
@@ -86,6 +91,22 @@ end;
 
 { TSkillPanelToolbar }
 
+procedure TSkillPanelToolbar.BeginUpdateImg;
+begin
+  fImg.Bitmap.BeginUpdate;
+end;
+
+procedure TSkillPanelToolbar.EndUpdateImg;
+begin
+  fImg.Bitmap.EndUpdate;
+  fImg.Bitmap.Changed;
+end;
+
+function TSkillPanelToolbar.GetUpdateCount: Integer;
+begin
+  Result := fImg.Bitmap.GetUpdateCount;
+end;
+
 constructor TSkillPanelToolbar.Create(aOwner: TComponent);
 var
   c: Char;
@@ -100,20 +121,22 @@ begin
   fImg.OnMouseMove := ImgMouseMove;
   fImg.OnMouseUp := ImgMouseUp;
 
-  fRectColor := DosVgaColorToColor32(DosInLevelPalettes[Consts.ChristmasPalette][3]);
+  if Consts.ChristmasPalette then
+    fRectColor := DosVgaColorToColor32(DosInLevelPalettes[True][1]) // red
+  else
+    fRectColor := DosVgaColorToColor32(DosInLevelPalettes[False][3]); // white
+
+//  fRectColor := DosVgaColorToColor32(DosInLevelPalettes[Consts.ChristmasPalette][3]);
 
   fOriginal := TBitmap32.Create;
+  fPauseButtonBuffer := TBitmap32.Create;
 
-  for i := 0 to 37 do begin
+  for i := 0 to 37 do
     fInfoFont[i] := TBitmap32.Create;
-  end;
-
-
 
   for c := '0' to '9' do
     for i := 0 to 1 do
       fSkillFont[c, i] := TBitmap32.Create;
-
 
   // info positions types:
   // strings (40 characters) = cursor + out + in + time = 1,15,24,32
@@ -124,7 +147,7 @@ begin
 
   fLastDrawnStr := StringOfChar(' ', 40);
   fNewDrawStr := StringOfChar(' ', 40);
-  fNewDrawStr := SSkillPanelTemplate;
+  fNewDrawStr := gt.SGame_ToolBar_TextTemplate;
 
   {$if defined(paranoid)}
   if fNewDrawStr.Length <> 40 then
@@ -145,7 +168,25 @@ begin
       fSkillFont[c, i].Free;
 
   fOriginal.Free;
+  fPauseButtonBuffer.Free;
   inherited;
+end;
+
+procedure TSkillPanelToolbar.SetStyleAndGraph(aStyle: TStyle; aGraph: TGraphicSet; aScale: Integer);
+begin
+  fImg.BeginUpdate;
+  fGraph := aGraph;
+  ReadBitmapFromStyle(aStyle);
+  InitPauseButtonBuffer;
+  fImg.Scale := aScale;
+  fImg.ScaleMode := smScale;
+  fImg.Height := fOriginal.Height * aScale;
+  fImg.Width := fOriginal.Width * aScale;
+  Width := fImg.Width;
+  Height := fImg.Height;
+  fImg.EndUpdate;
+  fImg.Changed;
+  Invalidate;
 end;
 
 procedure TSkillPanelToolbar.DrawButtonSelector(aButton: TSkillPanelButton; Highlight: Boolean);
@@ -157,7 +198,7 @@ begin
   if aButton = TSkillPanelButton.None then
     Exit;
   case Highlight of
-    False:
+    False: // remove selector by copying the original
       begin
         R := fButtonRects[aButton];
         Inc(R.Right);
@@ -194,9 +235,17 @@ begin
   end;
 end;
 
+procedure TSkillPanelToolbar.SwitchButtonSelector(oldButton, newButton: TSkillPanelButton);
+begin
+  if oldButton = newButton then
+    Exit;
+  DrawButtonSelector(oldButton, False);
+  DrawButtonSelector(newButton, True);
+end;
+
 procedure TSkillPanelToolbar.DrawNewStr;
 var
-  O, N: char;
+  oldChar, newChar: char;
   i, x, y, idx: integer;
 begin
   // info positions types:
@@ -211,17 +260,17 @@ begin
   for i := 1 to 40 do begin
     idx := -1;
 
-    O := UpCase(fLastDrawnStr[i]);
-    N := UpCase(fNewDrawStr[i]);
+    oldChar := UpCase(fLastDrawnStr[i]);
+    newChar := UpCase(fNewDrawStr[i]);
 
     // only draw changed letters
-    if O <> N then begin
+    if OldChar <> newChar then begin
       // get index of bitmap
-      case N of
+      case newChar of
         '%'      : idx := 0;
-        '0'..'9' : idx := ord(n) - ord('0') + 1;
+        '0'..'9' : idx := ord(newChar) - ord('0') + 1;
         '-'      : idx := 11;
-        'A'..'Z' : idx := ord(n) - ord('A') + 12;
+        'A'..'Z' : idx := ord(newChar) - ord('A') + 12;
       end;
 
       if (idx >= 0) and (idx <= 37)
@@ -232,6 +281,19 @@ begin
   end;
 end;
 
+procedure TSkillPanelToolbar.DrawCheckPauseButton;
+begin
+  if fPauseButtonChanged then begin
+    var r: TRect := fButtonRects[TSkillPanelButton.Pause];
+    if fIsPauseButtonHighlighted then begin
+      fPauseButtonBuffer.DrawTo(fImg.Bitmap, r.Left, r.Top);
+    end
+    else begin
+      fOriginal.DrawTo(fImg.Bitmap, r.Left, r.Top, r);
+    end;
+    fPauseButtonChanged := False;
+  end;
+end;
 
 procedure TSkillPanelToolbar.DrawSkillCount(aButton: TSkillPanelButton; aNumber: Integer);
 // draw the number of skills left in the top of the buttons
@@ -275,9 +337,10 @@ begin
 end;
 
 procedure TSkillPanelToolbar.RefreshInfo;
-// called by game or gamescreen after a frame is finished
+// called by game after a frame is finished
 begin
   DrawNewStr;
+  DrawCheckPauseButton;
   fLastDrawnStr := fNewDrawStr;
 end;
 
@@ -336,7 +399,7 @@ begin
 end;
 
 procedure TSkillPanelToolbar.ImgMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer; Layer: TCustomLayer);
-// ment for gamescreen
+// meant for gamescreen
 begin
   if Assigned(fOnSkillButtonsMouseUp) then
     fOnSkillButtonsMouseUp;
@@ -356,7 +419,7 @@ begin
   LemmixPal := DosPaletteToArrayOfColor32(DosInLevelPalettes[Consts.ChristmasPalette]);
   HiPal := fGraph.PaletteCustom;
 
-  {TODO: how o how is the palette constructed ??}
+  // this old code concatenates the palettes.
   Assert(Length(HiPal) = 8, 'hipal error');
   SetLength(LemmixPal, 16);
   for i := 8 to 15 do
@@ -365,8 +428,7 @@ begin
 
   Fn := aStyle.MainDatFileName;
 
-
-  SetButtonRects; // todo: move (just once needed)
+  SetButtonRects;
 
   Sections := TDosDatSectionList.Create;
   Decompressor := TDosDatDecompressor.Create;
@@ -386,8 +448,6 @@ begin
 
     fImg.Bitmap.Assign(fOriginal);
 
-    //fOriginal.SaveToPng(Consts.PathToDebugFiles + 'skillpanel.png');
-
     // info fonts
     Sections[6].DecompressedData.Seek($1900, soFromBeginning);
     for i := 0 to 37 do begin
@@ -395,18 +455,13 @@ begin
       //replacecolor(fInfoFont[i], Color32(0,176,0), clred32);
     end;
 
-    //for i := 0 to 37 do
-    //fInfoFont[i].SaveToPng(AppPath + 'bmpdebug\skillfont' + i.ToString.PadLeft(2, '0') + '.png');
-    //skillfont RGB = 0,176,0
-
     // skill fonts
-
     { TODO : christmas lemmings, fix it }
     //  pal := DosInLevelPalette;// fGraph.palettestandard; {DosInLevelPalette;}
-    //    pal[1] := pal[3]; // WHITE
+
     LemmixPal[1] := LemmixPal[3]; // WHITE
     Decompressor.DecompressSection(Sections[2].CompressedData, Sections[2].DecompressedData);
-    Sections[2].decompresseddata.seek($1900, sofrombeginning);
+    Sections[2].DecompressedData.seek($1900, sofrombeginning);
     for c := '0' to '9' do
       for i := 0 to 1 do
         TDosPlanarBitmap.LoadFromStream(sections[2].DecompressedData, fSkillFont[c, i], -1, 8, 8, 1, LemmixPal);
@@ -416,33 +471,38 @@ begin
   end;
 end;
 
+procedure TSkillPanelToolbar.InitPauseButtonBuffer;
+var
+  src, dst: TRect;
+  c: TColor32;
+begin
+  c := Color32(64, 64, 224, 0); // this is the lemming color
+  src := fButtonRects[TSkillPanelButton.Pause];
+  dst := ZeroTopLeftRect(src);
+  fPauseButtonBuffer.SetSize(dst.Width, dst.Height);
+  fOriginal.DrawTo(fPauseButtonBuffer, 0, 0, src);
+  fPauseButtonBuffer.ReplaceColor(0, c);
+end;
+
 procedure TSkillPanelToolbar.SetButtonRects;
 var
   Org, R: TRect;
   iButton: TSkillPanelButton;
-
 begin
-//  Sca := 3;
   Org := Rect(1, 16, 15, 38); // exact position of first button
   R := Org;
-  {R.Left := R.Left * Sca;
-  R.Right := R.Right * Sca;
-  R.Top := R.Top * Sca;
-  R.Bottom := R.Bottom * Sca; }
 
-  for iButton := Succ(Low(TSkillPanelButton)) to High(TSkillPanelButton) do
-  begin
+  for iButton := Succ(Low(TSkillPanelButton)) to High(TSkillPanelButton) do begin
     fButtonRects[iButton] := R;
     R.Offset(16, 0);
   end;
-
 end;
 
 procedure TSkillPanelToolbar.SetInfoCursorLemming(const Lem: string; Num: Integer);
 var
   S: string;
 begin
-  if Lem <> '' then begin
+  if not Lem.IsEmpty then begin
     S := (Lem + ' ' + IntToStr(Num)).PadRight(14);
     for var i := 1 to 14 do
       fNewDrawStr[i] := S[i];
@@ -462,7 +522,7 @@ begin
     fNewDrawStr[i] := S[i];
 end;
 
-procedure TSkillPanelToolbar.SetInfoLemmingsOut(Num: Integer); // todo: rename
+procedure TSkillPanelToolbar.SetInfoLemmingsOut(Num: Integer);
 var
   S: string;
 begin
@@ -471,12 +531,17 @@ begin
     fNewDrawStr[18 + i] := S[i]
 end;
 
-procedure TSkillPanelToolbar.SetInfoLemmingsIn(Num, Max: Integer); // todo: rename
+procedure TSkillPanelToolbar.SetInfoLemmingsSaved(Num, Max: Integer; showcount: Boolean);
 var
   S: string;
 begin
-  S := Percentage(Max, Num).ToString + '%';
-  // todo: optional real number lemstrings
+  if not showcount then begin
+    S := Percentage(Max, Num).ToString + '%';
+    S := S.PadRight(5);
+  end
+  else begin
+    S :=  Num.ToString.PadRight(3);
+  end;
   for var i := 1 to 5 do
     fNewDrawStr[26 + i] := S[i];
 end;
@@ -499,31 +564,23 @@ begin
     fNewDrawStr[38 + i] := S[i];
 end;
 
-procedure TSkillPanelToolbar.SetStyleAndGraph(aStyle: TStyle; aGraph: TGraphicSet; aScale: Integer);
+procedure TSkillPanelToolbar.SetPauseHighlight(highlight: Boolean);
 begin
-  fImg.BeginUpdate;
-  fGraph := aGraph;
-  ReadBitmapFromStyle(aStyle);
-  fImg.Scale := aScale;
-  fImg.ScaleMode := smScale;
-  fImg.Height := fOriginal.Height * aScale;
-  fImg.Width := fOriginal.Width * aScale;
-  Width := fImg.Width;
-  Height := fImg.Height;
-  fImg.EndUpdate;
-  fImg.Changed;
-  Invalidate;
+  if fIsPauseButtonHighlighted = highlight then
+    Exit;
+  fIsPauseButtonHighlighted := highlight;
+  fPauseButtonChanged := True;
 end;
 
 procedure TSkillPanelToolbar.DrawMinimap(Map: TBitmap32);
-// o wow: todo: keep it simple
+// o wow...
 var
   X: Integer;
 begin
   Map.DrawTo(Img.Bitmap, 208, 18);
-  if Parent <> nil then
-  begin
+  if Parent <> nil then begin
     X := -Round(TGameScreenPlayer(Parent).ScreenImg.OffsetHorz/(16 * fImg.Scale));
+//    X := -Round(fImg.OffsetHorz/(16 * fImg.Scale));
     Img.Bitmap.FrameRectS(208 + X, 18, 208 + X + 20 + 5, 38, fRectColor);
   end;
 end;

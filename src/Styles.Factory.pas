@@ -5,8 +5,8 @@ interface
 
 uses
   System.Generics.Collections,
-  Base.Utils,
-  Prog.Types, Prog.Base,
+  Base.Utils, Base.Types,
+  Prog.Base,
   Styles.Base, Styles.Dos, Styles.User;
 
 type
@@ -47,7 +47,6 @@ begin
   case Consts.StyleDef of
     TStyleDef.Orig: Result := TDosOrigStyle.Create(Consts.StyleName);
     TStyleDef.Ohno: Result := TDosOhNoStyle.Create(Consts.StyleName);
-    TStyleDef.H93 : Result := TDosH93Style.Create(Consts.StyleName);
     TStyleDef.H94 : Result := TDosH94Style.Create(Consts.StyleName);
     TStyleDef.X91 : Result := TDosX91Style.Create(Consts.StyleName);
     TStyleDef.X92 : Result := TDosX92Style.Create(Consts.StyleName);
@@ -61,7 +60,6 @@ begin
     Result.IsPooledByFactory := True;
   end;
 end;
-
 
 end.
 

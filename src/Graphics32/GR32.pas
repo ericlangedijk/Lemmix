@@ -637,7 +637,7 @@ const
   AREAINFO_MASK         = $FF000000;
 
 type
-  TPixelCombineEvent = procedure(F: TColor32; var B: TColor32; M: TColor32) of object;
+  TPixelCombineEvent = procedure(F: TColor32; var B: TColor32; M: TColor32); // of object; #EL 2021-02-05 made this static
   TAreaChangedEvent = procedure(Sender: TObject; const Area: TRect;
     const Info: Cardinal) of object;
 
@@ -903,7 +903,7 @@ type
     property StippleStep: Single read FStippleStep write FStippleStep;
 
     property MeasuringMode: Boolean read FMeasuringMode;
-  published
+  public // #EL 2021-02-05 removed published
     property DrawMode: TDrawMode read FDrawMode write SetDrawMode default dmOpaque;
     property CombineMode: TCombineMode read FCombineMode write SetCombineMode default cmBlend;
     property WrapMode: TWrapMode read FWrapMode write SetWrapMode default wmClamp;

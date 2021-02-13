@@ -9,8 +9,8 @@ uses
   System.Classes, System.Types, System.SysUtils, System.Contnrs, System.Math,
   GR32, GR32_OrdinalMaps,
   Dos.Compression, Dos.Structures,
-  Base.Utils, Base.Bitmaps,
-  Prog.Strings, Prog.Data;
+  Base.Utils, Base.Bitmaps, Base.Strings,
+  Prog.Data;
 
 type
   TLemmixPalette = record
@@ -74,7 +74,6 @@ function DosPaletteEntryToColor32(Red, Green, Blue: Byte): TColor32;
 // using colorhelper
 // decoding with (Integer(R) * 255) div 63 (as i encountered somewhere) has very slightly different results for the colors.
 // probably this way of decoding is better, because 63 maps to 255
-// todo: maybe change this
 begin
   Result.R := Red shl 2;
   Result.G := Green shl 2;
@@ -122,7 +121,7 @@ begin
 end;
 
 const
-  ALPHA_TRANSPARENTBLACK = $80000000; // TODO: maybe change this
+  ALPHA_TRANSPARENTBLACK = $80000000; // todo:check if used
 
 class procedure TDosPlanarBitmap.GetByteMap(S: TStream; aByteMap: TByteMap; aPos, aWidth, aHeight: Integer; BPP: Byte);
 {-------------------------------------------------------------------------------
@@ -163,7 +162,7 @@ var
   x, y: Integer;
   Entry: Byte;
 begin
-  Assert(BPP in [1..8], 'bpp error');
+    {$ifdef paranoid} Assert(BPP in [1..8], 'bpp error'); {$endif}
 
   LineSize := aWidth div 8; // Every bit is a pixel (in each plane)
   PlaneSize := LineSize * aHeight; // Now we know the planesize
@@ -223,7 +222,7 @@ begin
     for y := 0 to aHeight - 1 do
       for x := 0 to aWidth - 1 do
       begin
-        Assert(B^ < PalLen, 'error color ' + IntToStr(B^) + '; length pal = ' + IntToStr(PalLen));
+          {$ifdef paranoid} Assert(B^ < PalLen, 'error color ' + IntToStr(B^) + '; length pal = ' + IntToStr(PalLen)); {$endif}
         C^ := aPalette[B^];
         Inc(C); // typed pointer increment
         Inc(B); // typed pointer increment
@@ -422,7 +421,7 @@ var
   DosPal: TDosVGAPalette8;
   Pal: TArrayOfColor32;
 begin
-  Assert(aBitmap <> nil);
+    {$ifdef paranoid} Assert(aBitmap <> nil); {$endif}
 
   Decompressor := TDosDatDecompressor.Create;
   Mem := TMemoryStream.Create;

@@ -268,7 +268,7 @@ var
   SrcData, DstData: PRawBytes;
   ComputedChecksum: Integer;
 begin
-  Assert(COMPRESSIONHEADER_SIZE = 10, 'Program error DecompressSection');
+    {$ifdef paranoid} Assert(COMPRESSIONHEADER_SIZE = 10, 'Program error DecompressSection'); {$endif}
   Result := 0;
   FillChar(Header, SizeOf(Header), 0);
   Rd := SrcStream.Read(Header, COMPRESSIONHEADER_SIZE);

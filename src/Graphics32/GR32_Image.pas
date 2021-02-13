@@ -881,7 +881,7 @@ begin
     FBuffer.Unlock;
   end;
 
-  DoPaintGDIOverlay;
+  // DoPaintGDIOverlay; #EL disabled for extra performance
 
   if FRepaintOptimizer.Enabled then
     FRepaintOptimizer.EndPaint;

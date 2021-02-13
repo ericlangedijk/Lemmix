@@ -21,6 +21,9 @@ type
 
     class procedure LoadLVLFromFile(const aFileName: string; var LVL: TLVLRec); static;
     class procedure LoadLVLFromStream(aStream: TStream; var LVL: TLVLRec); static;
+
+    class procedure SaveLVLToFile(const aFilename: string; const LVL: TLVLRec); static;
+    class procedure SaveLVLToStream(aStream: TStream; const LVL: TLVLRec); static;
   end;
 
   TLemminiLoader = class
@@ -51,6 +54,21 @@ class procedure TLevelLoader.LoadLVLFromStream(aStream: TStream; var LVL: TLVLRe
 begin
   FillChar(LVL, SizeOf(LVL), 0);
   aStream.ReadBuffer(LVL, LVL_SIZE);
+end;
+
+class procedure TLevelLoader.SaveLVLToFile(const aFilename: string; const LVL: TLVLRec);
+begin
+  var f: TBufferedFileStream := TBufferedFileStream.Create(aFileName, fmCreate);
+  try
+    SaveLVLToStream(f, LVL);
+  finally
+    f.Free;
+  end;
+end;
+
+class procedure TLevelLoader.SaveLVLToStream(aStream: TStream; const LVL: TLVLRec);
+begin
+  aStream.WriteData(LVL);
 end;
 
 class procedure TLevelLoader.TranslateLevel(const LVL: TLVLRec; aLevel: TLevel);
@@ -145,7 +163,7 @@ begin
   aLevel.Info.ReleaseRate      := EnsureRange(aLevel.Info.ReleaseRate, 1, 99);
   aLevel.Info.LemmingsCount    := EnsureRange(aLevel.Info.LemmingsCount, 1, 255); // ok ok
   aLevel.Info.RescueCount      := EnsureRange(aLevel.Info.RescueCount, 1, aLevel.Info.LemmingsCount);
-  aLevel.Info.TimeLimit        := EnsureRange(aLevel.Info.TimeLimit, 1, 9);
+  aLevel.Info.TimeLimit        := EnsureRange(aLevel.Info.TimeLimit, 1, 99); // #EL support for max 99 minutes
   aLevel.Info.ClimberCount     := EnsureRange(aLevel.Info.ClimberCount, 0, 99);
   aLevel.Info.FloaterCount     := EnsureRange(aLevel.Info.FloaterCount, 0, 99);
   aLevel.Info.BomberCount      := EnsureRange(aLevel.Info.BomberCount, 0, 99);
@@ -161,12 +179,6 @@ begin
   // todo: find the best solution for this
   if aLevel.Info.GraphicSetEx > 4 then
     aLevel.Info.GraphicSetEx := 1;
-
-//  for Obj in aLevel.InteractiveObjects do
-//    if Obj.Identifier = DOS_OBJECT_ID_EXIT then
-//      dlg(obj.)
-//       Obj.DrawingFlags := 0;//{Obj.DrawingFlags or }odf_NoOverwrite;
-
 end;
 
 class procedure TLevelLoader.TranslateLevel(aLevel: TLevel; var LVL: TLVLRec);
@@ -294,7 +306,7 @@ begin
     if H < 0 then
       Inc(H, 512);
     T.B3 := Byte((H or Bit8) shl 7); // todo: still don't know if this is right this "or bit8" (although it worked from 2006-2020)
-//      H := H and not Bit8;
+    // H := H and not Bit8;
     H := H shr 1;
     T.B2 := Byte(H);
     // GET: TerrainId := T.B3 and 63; // max = 63.
@@ -342,7 +354,7 @@ var
 
     procedure Error(const s: string);
     begin
-      Throw('Error in Lemmini file: ' + aFilename + sLineBreak + s, method);
+      Throw('Error in Lemmini file: ' + CRLF + CRLF + s, method);
     end;
 
     function ValueToInts(count: Integer; var ar: TArray<Integer>): Boolean;
@@ -500,7 +512,7 @@ var
 
     function TryIgnore: Boolean;
     begin
-      Result := (key <> '') or (value <> '');
+      Result := (key <> string.Empty) or (value <> string.Empty);
     end;
 
     procedure Validate;

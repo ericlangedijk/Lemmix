@@ -1,30 +1,37 @@
-unit Base.Utils;
+﻿unit Base.Utils;
 
 {$include lem_directives.inc}
 
 interface
 
 // Base.Utils must be without any lemmix program specific references.
-// Some globals here, som baseclasses as well, and some basic stuff.
+// Some basic stuff here as well as the important initialization of the executable.
 
 uses
+  {$ifdef debug}
+  System.Rtti, System.TypInfo, // debug mode logging using TValue
+  {$endif}
   Winapi.Windows, Winapi.Messages,
-  System.Types, System.Classes, System.SysUtils, System.TypInfo, System.IniFiles, System.Math, System.Contnrs, System.Generics.Collections,
-  System.Rtti, System.IOUtils,
-  Vcl.Forms,
+  System.Types, System.Classes, System.SysUtils, System.IniFiles, System.Math, System.Contnrs, System.Generics.Collections, System.Character,
+  System.IOUtils,
+  Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.Menus,
   GR32;
 
-function InitializeLemmix: Boolean;
-
-procedure DoThrow(const msg: string; const proc: string = '');
-
-type
-  TObjectHelper = class helper for TObject
-  public
-    class procedure Throw(const msg: string; const method: string = '');
-  end;
-
 const
+  // cursors
+  GAME_CURSOR_DEFAULT     = 1;
+  GAME_CURSOR_LEMMING     = 2;
+  GAME_CURSOR_DRAG        = 3;
+  PROGAM_CURSOR_HOURGLASS = 4;
+
+  // chars
+  CR = #13;
+  LF = #10;
+  CRLF = sLineBreak;
+  tab = Chr(9);
+  bulletright = Chr($2023);
+  bullet = Chr($25CF);
+
   // bitnumbers
   Bit0  = 1;         // 1
   Bit1  = 1 shl 1;   // 2
@@ -43,37 +50,104 @@ const
   Bit14 = 1 shl 14;  // 16384
   Bit15 = 1 shl 15;  // 32768
 
+function InitializeLemmix: Boolean;
+procedure DoThrow(const msg: string; const proc: string = string.Empty);
+
+type
+//  TStringFeedbackProc = reference to procedure(const s: string);
+  TFeedbackProc = reference to procedure (const msg: string);
+
+type
+  TObjectHelper = class helper for TObject
+  public
+    class procedure Throw(const msg: string; const method: string = string.Empty);
+  end;
+
+  TIdle = class sealed
+  private
+    fActive: Boolean;
+    fIdleEvent: TIdleEvent;
+    fActivateEvent: TNotifyEvent;
+    fDeactivateEvent: TNotifyEvent;
+    procedure SetActive(const Value: Boolean);
+  public
+    constructor Create(aIdleEvent: TIdleEvent; aActivateEvent: TNotifyEvent = nil; aDeactivateEvent: TNotifyEvent = nil);
+    destructor Destroy; override;
+    property Active: Boolean read fActive write SetActive;
+  end;
+
+  ITempCursor = interface(IInterface)
+    ['{495ADE0F-EFBE-4A0E-BF37-F1ACCACCE03D}']
+  end;
+
+  TempCursor = class(TInterfacedObject, ITempCursor)
+  strict private
+    fCursor: TCursor;
+  public
+    constructor Create(const aCursor: TCursor);
+    destructor Destroy; override;
+    class function Activate(const aCursor: TCursor = PROGAM_CURSOR_HOURGLASS): ITempCursor;
+  end;
+
+  // dedicated simple string helper for creating a tab seperated string for help screen
+  THelpString = record
+  private
+    fText: string;
+  public
+    class operator Initialize(out h: THelpString);
+    class operator Implicit(const s: string): THelpString; inline;
+    class operator Implicit(const h: THelpString): string; inline;
+    procedure Add(const key, value: string); overload; inline;
+    procedure Add(const key: Word; const value: string); overload; inline;
+    procedure Add(const key: Word; shift: TShiftState; const value: string); overload; inline;
+    procedure Split(keys, values: TStringList); overload;
+    procedure Split(out keys: TArray<string>; out values: TArray<string>); overload;
+    property Text: string read fText;
+  end;
+
 
 // file stuff
 function ForceDir(const aFileName: string): Boolean;
 function GetFileSize(const aFilename: string): Int64;
+function SelectFileDlg(const ext: string): string;
 
 // string stuff
+function FormatSimple(const s: string; const args: array of string): string;
 function LeadZeroStr(const i, zeros: Integer): string; inline;
-function ThousandStr(Int: Integer): string; overload;
-function ThousandStr(Int: Cardinal): string; overload;
-function CutLeft(const S: string; aLen: integer): string;
-function CutRight(const S: string; aLen: integer): string;
+function ThousandStr(Int: Integer): string; overload; inline;
+function ThousandStr(Int: Cardinal): string; overload; inline;
+function CutLeft(const S: string; aLen: integer): string; inline;
+function CutRight(const S: string; aLen: integer): string; inline;
 function ReplaceFileExt(const aFileName, aNewExt: string): string;
 function StripInvalidFileChars(const S: string; removeDots: Boolean = True; removeDoubleSpaces: Boolean = True; trimAccess: Boolean = True): string;
+function CheckReformStringForDialog(const s: string): string;
+function SpaceCamelCase(const s: string): string;
+function StringFromFile(const aFilename: string): string;
 
 // conversion string stuff
 function RectStr(const R: TRect): string;
 function PointStr(const P: TPoint): string;
 function BytesToHex(const bytes: TBytes): string;
-function YesNo(const b: Boolean): string; inline;
 
 // rectangle stuff
 function ZeroTopLeftRect(const r: TRect): TRect; inline;
-procedure RectMove(var r: TRect; x, y: Integer); inline;
 
 // int stuff
 procedure Restrict(var i: Integer; aMin, aMax: Integer); overload; inline;
 procedure Restrict(var s: Single; const aMin, aMax: Single); overload; inline;
 function Percentage(Max, N: integer): integer;
 
-// debug
+// win stuff
+function GetLocalComputerName: string;
+
+// low level system messagebox
 procedure Dlg(const s: string);
+
+// shortcut string
+function KeyStr(key: Word; shift: TShiftState = []): string;
+function MouseStr(button: TMouseButton; shift: TShiftState = []): string;
+
+// debug
 {$ifdef debug}
 procedure Log(const v: TValue); overload;
 procedure Log(const v1, v2: TValue); overload;
@@ -90,6 +164,7 @@ function GetAppVersionString(out major, minor, release, build: Integer): string;
 // timing stuff
 function QueryTimer: Int64; overload; inline;
 function MSBetween(const T1, T2: Int64): Int64; inline;
+function MSBetweenD(const T1, T2: Int64): Double; inline;
 
 // simple timer mechanism
 type
@@ -114,46 +189,40 @@ type
   TIntHelper = record helper for Integer
   public
     function ToString: string; inline;
+    function ToThousandString: string; inline;
     function Scale: Integer; inline;
   end;
 
-  // just useless stub interfaces to prevent circular references
-  IDosForm = interface
+  // just useless stub interface to prevent circular references
+  IForm = interface
     ['{24535447-B742-4EB2-B688-825A1AD69349}']
   end;
 
   IMainForm = interface
-  ['{24535447-B742-4EB2-B688-825A1AD69349}']
+    ['{24535447-B742-4EB2-B688-825A1AD69349}']
     procedure SwitchToNextMonitor;
   end;
 
   TDisplayInfo = record
   private
-    fMainForm: IMainForm;
-    fCurrentForm: IDosForm;
+    fGeneralPurposeBitmap: TBitmap;
+    procedure FreeBitmap;
+  private
     fDpi: Integer; // the dpi of the monitor
     fMonitorIndex: Integer; // the current monitor index
     fBoundsRect: TRect; // the boundsrect of the current display
     fDpiScale: Single; // scale relative = Dpi/96
     procedure SetMonitorIndex(aValue: Integer);
   public
-    property MainForm: IMainForm read fMainForm write fMainForm;
-    property CurrentForm: IDosForm read fCurrentForm write fCurrentForm;
+    function CalcTextExtent(aFont: TFont; const s: string): TSize; overload;
+    function CalcTextExtent(const aFontname: string; aFontHeight: Integer; const s: string): TSize; overload;
     property MonitorIndex: Integer read fMonitorIndex write SetMonitorIndex;
-
     property Dpi: Integer read fDpi;
     property DpiScale: Single read fDpiScale;
     property BoundsRect: TRect read fBoundsRect;
   end;
 
-
 type
-  Enum = class sealed
-  public
-    // enum to string of set to string
-    class function AsString<T>(const aValue: T): string; static; inline;
-  end;
-
   TFastObjectList<T: class> = class;
 
   // fastest possible 'for in' loop support
@@ -224,20 +293,23 @@ var
   _Freq: Int64; // for timer
   _MemoryMappedFileHandle: THandle; // for restarting lemmix with new parameter
   _LemmixMemoryMappedRecord: PLemmixMemoryMappedRecord; // the pointer
-  CurrentDisplay: TDisplayInfo; // info on monitor and currently active form
+  CurrentDisplay: TDisplayInfo; // info on monitor and dpi
 
 implementation
 
-procedure DoThrow(const msg: string; const proc: string = '');
+var
+  GlobalDlg: TOpenDialog;
+
+procedure DoThrow(const msg: string; const proc: string = string.Empty);
 // generic invalid operation exception for procedues
 begin
   var txt: string := msg;
-  if proc <> '' then
-    txt := txt + sLineBreak + 'Proc: ' + proc;
+  if proc.IsEmpty then
+    txt := txt + CRLF + 'Proc: ' + proc;
   raise EInvalidOperation.Create(txt) at ReturnAddress;
 end;
 
-class procedure TObjectHelper.Throw(const msg: string; const method: string = '');
+class procedure TObjectHelper.Throw(const msg: string; const method: string = string.Empty);
 // generic object helper for invalid operation exception from method of whichever object
 var
   classString: string;
@@ -245,10 +317,68 @@ begin
   classString := ClassName;
   if classString.StartsWith('T') then
     classString := Copy(classString, 2, Length(ClassString));
-  var txt: string := msg + sLineBreak + sLineBreak + 'Error from: ' + classString + sLineBreak + 'Unit: ' + Unitname;
-  if method <> '' then
-    txt := txt + sLineBreak + 'Method: ' + method;
+  var txt: string := msg + CRLF + CRLF + 'Error from: ' + classString + CRLF + 'Unit: ' + Unitname;
+  if method.isEmpty then
+    txt := txt + CRLF + 'Method: ' + method;
   raise EInvalidOperation.Create(txt) at ReturnAddress;
+end;
+
+{ TIdle }
+
+constructor TIdle.Create(aIdleEvent: TIdleEvent; aActivateEvent: TNotifyEvent = nil; aDeactivateEvent: TNotifyEvent = nil);
+begin
+  inherited Create;
+  fIdleEvent := aIdleEvent;
+  fActivateEvent := aActivateEvent;
+  fDeactivateEvent := aDeactivateEvent;
+end;
+
+destructor TIdle.Destroy;
+begin
+  Active := False;
+  inherited;
+end;
+
+procedure TIdle.SetActive(const Value: Boolean);
+begin
+  if fActive = Value then
+    Exit;
+  fActive := Value;
+  case fActive of
+    False:
+      begin
+        Application.OnIdle := nil;
+        Application.OnActivate := nil;
+        Application.OnDeactivate := nil;
+      end;
+    True:
+      begin
+        Application.OnIdle := fIdleEvent;
+        Application.OnActivate := fActivateEvent;
+        Application.OnDeactivate := fDeactivateEvent;
+      end;
+  end;
+end;
+
+{ TempCursor }
+
+constructor TempCursor.Create(const aCursor: TCursor);
+begin
+  inherited Create;
+  fCursor := Screen.Cursor;
+  Screen.Cursor := aCursor;
+end;
+
+destructor TempCursor.Destroy;
+begin
+  if Assigned(Screen) then
+    Screen.Cursor := fCursor;
+  inherited Destroy;
+end;
+
+class function TempCursor.Activate(const aCursor: TCursor = PROGAM_CURSOR_HOURGLASS): ITempCursor;
+begin
+  Result := TempCursor.Create(aCursor);
 end;
 
 function ForceDir(const aFileName: string): Boolean;
@@ -259,13 +389,32 @@ begin
 end;
 
 function GetFileSize(const aFilename: String): Int64;
-  var
-    info: TWin32FileAttributeData;
+var
+  info: TWin32FileAttributeData;
 begin
   result := -1;
   if not GetFileAttributesEx(PWideChar(aFileName), GetFileExInfoStandard, @info) then
     Exit;
   result := Int64(info.nFileSizeLow) or Int64(info.nFileSizeHigh shl 32);
+end;
+
+function SelectFileDlg(const ext: string): string;
+begin
+  if not Assigned(GlobalDlg) then begin
+    GlobalDlg := TOpenDialog.Create(Application);
+  end;
+
+  GlobalDlg.FileName := ext;
+  if GlobalDlg.Execute
+  then Result := GlobalDlg.FileName
+  else Result := string.Empty;
+end;
+
+function FormatSimple(const s: string; const args: array of string): string;
+begin
+  Result := s;
+  for var i := 0 to Length(args) - 1 do
+    Result := Result.Replace('%s', args[i], []);
 end;
 
 function LeadZeroStr(const i, zeros: Integer): string; inline;
@@ -299,11 +448,6 @@ begin
   Result.Offset(-Result.Left, -Result.Top);
 end;
 
-procedure RectMove(var r: TRect; x, y: Integer);
-begin
-  r.Offset(x, y);
-end;
-
 procedure Restrict(var i: Integer; aMin, aMax: Integer);
 begin
   i := EnsureRange(i, aMin, aMax);
@@ -322,15 +466,39 @@ begin
     Result := Trunc((N/Max) * 100);
 end;
 
+function GetLocalComputerName: string;
+var
+  c1: dword;
+  arrCh : array [0..MAX_PATH] of char;
+begin
+  c1 := MAX_PATH;
+  GetComputerName(arrCh, c1);
+  if c1 > 0 then
+    result := arrCh
+  else
+    result := string.Empty;
+end;
+
+function StringFromFile(const aFilename: string): string;
+begin
+  var list: TStringList := TStringList.Create;
+  try
+    list.LoadFromFile(aFilename);
+    Result := list.Text;
+  finally
+    list.Free;
+  end;
+end;
+
 function ReplaceFileExt(const aFileName, aNewExt: string): string;
 var
   Ext, NewExt: string;
 begin
   Ext := ExtractFileExt(aFileName);
   NewExt := aNewExt;
-  if (NewExt <> '') and not NewExt.StartsWith('.') then
+  if not NewExt.IsEmpty and not NewExt.StartsWith('.') then
     NewExt := '.' + NewExt;
-  if Ext <> '' then
+  if Ext <> string.Empty then
     Result := Copy(aFileName, 1, Length(aFileName) - Length(Ext)) + NewExt
   else
     Result := aFilename + NewExt;
@@ -338,21 +506,46 @@ end;
 
 function StripInvalidFileChars(const S: string; removeDots: Boolean = True; removeDoubleSpaces: Boolean = True; trimAccess: Boolean = True): string;
 begin
-  Result := '';
+  Result := string.Empty;
   for var C: Char in S do
     if TPath.IsValidFileNameChar(C) then
       Result := Result + C;
 
   if removeDoubleSpaces then
     while Pos('  ', Result) > 0 do
-      Result := Result.Replace('  ', '');
+      Result := Result.Replace('  ', ' ');
 
   if removeDots then
-    while Pos('.', Result) > 0 do
-      Result := Result.Replace('.', '');
+    Result := Result.Replace('.', string.Empty);
 
   if trimAccess then
     Result := Result.Trim;
+end;
+
+function CheckReformStringForDialog(const s: string): string;
+begin
+  if not s.Contains(':\') then
+    Result := s
+  else
+    Result := s.Replace('\', ' ' + bulletright + ' ');
+end;
+
+function SpaceCamelCase(const s: string): string;
+var
+  first, upper, prevupper: Boolean;
+begin
+  Result := string.Empty;
+  first := True;
+  prevupper := False;
+  for var c: Char in s do begin
+    upper := c.IsUpper;
+    if not first and upper and not prevupper then
+      Result := Result + ' ' + c
+    else
+      Result := Result + c;
+    prevupper := upper;
+    first := False;
+  end;
 end;
 
 function RectStr(const R: TRect): string;
@@ -376,14 +569,29 @@ begin
   end;
 end;
 
-function YesNo(const b: Boolean): string; inline;
-begin
-  if b then Result := 'yes' else Result := 'no';
-end;
-
 procedure Dlg(const s: string);
 begin
-  MessageBox(0, Pchar(s), 'Lemmix', 0); // todo: this messes with focus controls. not restored ok (test out in Finder screen)
+  MessageBox(0, Pchar(s), 'Lemmix', 0); // do not use when active: this messes with focus controls.
+end;
+
+function KeyStr(key: Word; shift: TShiftState = []): string;
+begin
+  if key = VK_PAUSE then
+    Result := 'Pause/Break'
+  else
+    Result := ShortCutToText(ShortCut(key, shift))
+end;
+
+function MouseStr(button: TMouseButton; shift: TShiftState = []): string;
+const
+  ar: array[TMouseButton] of string = ('Left Click', 'Right Click', 'Middle Click'); // todo: localize
+begin
+  Result := string.Empty;
+  if ssShift in shift then Result := Result + 'Shift';//MenuKeyCaps[mkcShift];
+  if ssCtrl in shift then begin if not Result.IsEmpty then Result := Result + '+'; Result := Result + 'Ctrl'; end; //MenuKeyCaps[mkcCtrl];
+  if ssAlt in shift then begin if not Result.IsEmpty then Result := Result + '+'; Result := Result + 'Alt'; end; //MenuKeyCaps[mkcAlt];
+  if not Result.IsEmpty then Result := Result + '+';
+  Result := Result + ar[button];
 end;
 
 {$ifdef debug}
@@ -467,7 +675,7 @@ begin
   release := LongRec(FixedPtr.dwFileVersionLS).Hi;
   build := LongRec(FixedPtr.dwFileVersionLS).Lo;
 
-  Result := Format('%d.%d.%d', [major, minor, release]);
+  Result := Format('%d.%d.%d', [major, minor, release]); // we do not use the build number
 end;
 
 function QueryTimer: Int64;
@@ -484,6 +692,15 @@ begin
     Result := Trunc(1000 * ((T1 - T2) / _Freq))
 end;
 
+function MSBetweenD(const T1, T2: Int64): Double;
+// returns the difference in milliseconds between 2 values, calculated with QueryTimer
+begin
+  if T2 > T1 then
+    Result := 1000 * ((T2 - T1) / _Freq)
+  else
+    Result := 1000 * ((T1 - T2) / _Freq)
+end;
+
 { TTicker }
 
 procedure TTicker.Reset(const aLastTick: Int64);
@@ -497,7 +714,89 @@ begin
   Result := (aCurrentTick > fLastTick) and (Trunc(1000 * ((aCurrentTick - fLastTick) / _Freq)) >= fInterval);
 end;
 
+class operator THelpString.Initialize(out h: THelpString);
+begin
+  h.fText := string.Empty;
+end;
+
+class operator THelpString.Implicit(const s: string): THelpString;
+begin
+  Result.fText := s;
+end;
+
+class operator THelpString.Implicit(const h: THelpString): string;
+begin
+  Result := h.fText;
+end;
+
+procedure THelpString.Add(const key, value: string);
+begin
+  fText := fText + key + tab + value + CRLF;
+end;
+
+procedure THelpString.Add(const key: Word; const value: string);
+begin
+  Add(KeyStr(key), value);
+end;
+
+procedure THelpString.Add(const key: Word; shift: TShiftState; const value: string);
+begin
+  Add(KeyStr(key, shift), value);
+end;
+
+procedure THelpString.Split(out keys: TArray<string>; out values: TArray<string>);
+var
+  lines: TArray<string>;
+  s: string;
+  KeyValue: TArray<string>;
+begin
+  lines := fText.Split([CRLF]);
+  SetLength(keys, Length(lines));
+  SetLength(values, Length(lines));
+  for var i := 0 to Length(lines) - 1 do begin
+    s := lines[i];
+    KeyValue := s.Split([tab]);
+    if Length(KeyValue) = 2 then begin
+      keys[i] := KeyValue[0];
+      values[i] := KeyValue[1];
+    end
+    else begin
+      keys[i] := string.Empty;
+      values[i] := s;
+    end;
+  end;
+end;
+
+procedure THelpString.Split(keys, values: TStringList);
+var
+  lines: TArray<string>;
+  s: string;
+  KeyValue: TArray<string>;
+begin
+  keys.Clear;
+  values.Clear;
+  lines := fText.Split([CRLF]);
+  for var i := 0 to Length(lines) - 1 do begin
+    s := lines[i];
+    KeyValue := s.Split([tab]);
+    if Length(KeyValue) = 2 then begin
+      keys.add(KeyValue[0]);
+      values.Add(KeyValue[1]);
+    end
+    else begin
+      keys.Add(string.Empty);
+      values.Add(s);
+    end;
+  end;
+end;
+
 { TDisplayInfo }
+
+procedure TDisplayInfo.FreeBitmap;
+begin
+  if Assigned(fGeneralPurposeBitmap) then
+    FreeAndNil(fGeneralPurposeBitmap);
+end;
 
 procedure TDisplayInfo.SetMonitorIndex(aValue: Integer);
 var
@@ -508,16 +807,29 @@ begin
   fMonitorIndex := aValue;
   monitor := Screen.Monitors[fMonitorIndex];
   fDpi := monitor.PixelsPerInch;
-  fDpiScale := fDpi / 96;
+  fDpiScale := fDpi / 96;  // 96 or 72 ??? vcl.forms
   fBoundsRect := monitor.BoundsRect;
 end;
 
-{ Enum }
-
-class function Enum.AsString<T>(const aValue: T): string;
-// alleen aanroepen voor enum of set met typeinfo
+function TDisplayInfo.CalcTextExtent(aFont: TFont; const s: string): TSize;
 begin
-  Result := TValue.From<T>(aValue).ToString;
+  if not Assigned(fGeneralPurposeBitmap) then begin
+    fGeneralPurposeBitmap := TBitmap.Create;
+    fGeneralPurposeBitmap.SetSize(16, 16);
+  end;
+  fGeneralPurposeBitmap.Canvas.Font := aFont;
+  Result := fGeneralPurposeBitmap.Canvas.TextExtent(s);
+end;
+
+function TDisplayInfo.CalcTextExtent(const aFontname: string; aFontHeight: Integer; const s: string): TSize;
+begin
+  if not Assigned(fGeneralPurposeBitmap) then begin
+    fGeneralPurposeBitmap := TBitmap.Create;
+    fGeneralPurposeBitmap.SetSize(16, 16);
+  end;
+  fGeneralPurposeBitmap.Canvas.Font.Name := aFontName;
+  fGeneralPurposeBitmap.Canvas.Font.Height := aFontHeight;
+  Result := fGeneralPurposeBitmap.Canvas.TextExtent(s);
 end;
 
 { TEnumeratorForFastList<T> }
@@ -623,6 +935,11 @@ begin
   Result := IntToStr(Self);
 end;
 
+function TIntHelper.ToThousandString: string;
+begin
+  Result := FloatToStrF(Self / 1, ffNumber, 15, 0);
+end;
+
 function TIntHelper.Scale: Integer;
 begin
   Result := Base.utils.Scale(Self);
@@ -699,8 +1016,8 @@ var
   tempRecord: PLemmixMemoryMappedRecord;
 begin
   param := ParamStr(1);
-  if param.Trim.IsEmpty then   begin
-    //MessageBox(GetDesktopWindow, 'Lemmix is already running', 0, MB_SYSTEMMODAL);// todo: damn this shows a second taskbar item. we ignore this for now
+  if param.Trim.IsEmpty then  begin
+    // no messagebox because of 2x taskbar
     Exit;
   end;
 
@@ -742,7 +1059,7 @@ begin
   _Mutex := CreateMutex(nil, True, PChar(_UniqueName));
   if GetLastError = ERROR_ALREADY_EXISTS then begin
     _Mutex := 0;
-    Dlg('Failed to create mutex');
+    Dlg('Lemmix failed to create mutex');
     Exit(False);
   end;
 
@@ -767,6 +1084,29 @@ initialization
   QueryPerformanceFrequency(_Freq);
 finalization
   FinalizeLemmix;
+  CurrentDisplay.FreeBitmap;
 end.
 
+
+// faster string starts with
+(*
+function MyStartsWith(const SearchText, Text: string): Boolean;
+var
+  Index, SearchTextLen: Integer;
+begin
+  SearchTextLen := Length(SearchText);
+  if SearchTextLen>Length(Text) then
+  begin
+    Result := False;
+    Exit;
+  end;
+  for Index := 1 to SearchTextLen do
+    if Text[Index]<>SearchText[Index] then
+    begin
+      Result := False;
+      Exit;
+    end;
+  Result := True;
+end;
+*)
 
