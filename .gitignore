@@ -2,3 +2,6 @@ src/dcu/*.dcu
 src/Lemmix.map
 src/Lemmix.exe
 src/Lemmix.drc
+src/Lemmix.dsk
+src/Lemmix.dproj.local
+src/Lemmix.identcache
