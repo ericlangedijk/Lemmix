@@ -509,7 +509,7 @@ procedure TFormMain.Run;
 
     procedure CheckLoadLanguage;
     begin
-      gt.Save('Default.config');
+      //gt.Save('Default.config');
       if App.Config.LanguageIsDefault then
         Exit;
       // pre-check
